@@ -26,7 +26,6 @@ const EXCHANGE_NAMES: Record<SupportedExchange, string> = {
   binance: 'Binance',
   bybit: 'Bybit',
   bitget: 'Bitget',
-  mexc: 'MEXC',
 };
 
 function parseRequestedExchanges(searchParams: URLSearchParams): SupportedExchange[] {

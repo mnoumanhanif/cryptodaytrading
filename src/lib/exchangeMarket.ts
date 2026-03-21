@@ -1,14 +1,13 @@
 import { BinanceTicker, Candle } from './types';
 
-export type SupportedExchange = 'binance' | 'bybit' | 'bitget' | 'mexc';
+export type SupportedExchange = 'binance' | 'bybit' | 'bitget';
 
-export const SUPPORTED_EXCHANGES: SupportedExchange[] = ['binance', 'bybit', 'bitget', 'mexc'];
+export const SUPPORTED_EXCHANGES: SupportedExchange[] = ['binance', 'bybit', 'bitget'];
 
 const FETCH_TIMEOUT_MS = 8_000;
 const HOUR_IN_MS = 60 * 60 * 1000;
 const BYBIT_KEY = process.env.BYBIT_API_KEY?.trim();
 const BITGET_KEY = process.env.BITGET_API_KEY?.trim();
-const MEXC_KEY = process.env.MEXC_API_KEY?.trim();
 
 function normalizePercent(value: number): number {
   if (!Number.isFinite(value)) return 0;
@@ -196,34 +195,6 @@ async function fetchBitgetKlines(symbol: string, limit: number): Promise<Candle[
     .sort((a, b) => a.openTime - b.openTime);
 }
 
-async function fetchMexcTopUSDTPairs(topN: number): Promise<BinanceTicker[]> {
-  const data = await fetchJson<BinanceTicker[]>(
-    'https://api.mexc.com/api/v3/ticker/24hr',
-    MEXC_KEY ? { 'X-MEXC-APIKEY': MEXC_KEY } : undefined
-  );
-  return data
-    .filter((t) => t.symbol.endsWith('USDT'))
-    .filter((t) => !t.symbol.includes('UP') && !t.symbol.includes('DOWN'))
-    .sort((a, b) => parseFloat(b.quoteVolume) - parseFloat(a.quoteVolume))
-    .slice(0, topN);
-}
-
-async function fetchMexcKlines(symbol: string, limit: number): Promise<Candle[]> {
-  const data = await fetchJson<Array<[number, string, string, string, string, string, number]>>(
-    `https://api.mexc.com/api/v3/klines?symbol=${encodeURIComponent(symbol)}&interval=1h&limit=${Math.min(Math.max(limit, 1), 1000)}`,
-    MEXC_KEY ? { 'X-MEXC-APIKEY': MEXC_KEY } : undefined
-  );
-  return data.map((k) => ({
-    openTime: k[0],
-    open: parseFloat(k[1]),
-    high: parseFloat(k[2]),
-    low: parseFloat(k[3]),
-    close: parseFloat(k[4]),
-    volume: parseFloat(k[5]),
-    closeTime: k[6],
-  }));
-}
-
 export async function getTopUSDTPairsByExchange(
   exchange: SupportedExchange,
   topN: number
@@ -233,8 +204,6 @@ export async function getTopUSDTPairsByExchange(
       return fetchBybitTopUSDTPairs(topN);
     case 'bitget':
       return fetchBitgetTopUSDTPairs(topN);
-    case 'mexc':
-      return fetchMexcTopUSDTPairs(topN);
     case 'binance':
     default: {
       const { getTopUSDTPairs } = await import('./binance');
@@ -309,14 +278,6 @@ export async function getTickerBySymbolByExchange(
         count: 0,
       };
     }
-    case 'mexc': {
-      const data = await fetchJson<BinanceTicker | BinanceTicker[]>(
-        `https://api.mexc.com/api/v3/ticker/24hr?symbol=${encodeURIComponent(symbol)}`,
-        MEXC_KEY ? { 'X-MEXC-APIKEY': MEXC_KEY } : undefined
-      );
-      const ticker = Array.isArray(data) ? data[0] : data;
-      return ticker && ticker.symbol === symbol ? ticker : null;
-    }
     case 'binance':
     default: {
       const { fetch24hTickers } = await import('./binance');
@@ -336,8 +297,6 @@ export async function fetchKlinesByExchange(
       return fetchBybitKlines(symbol, limit);
     case 'bitget':
       return fetchBitgetKlines(symbol, limit);
-    case 'mexc':
-      return fetchMexcKlines(symbol, limit);
     case 'binance':
     default: {
       const { fetchKlines } = await import('./binance');
