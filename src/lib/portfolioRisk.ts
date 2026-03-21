@@ -219,7 +219,7 @@ export function getPortfolioIntelligence(
   if (accountState.openPositionCount >= config.maxOpenPositions) {
     adjustments.push(`Reduce new trades: max open positions is ${config.maxOpenPositions}`);
   }
-  if (recentWinRate < 50) {
+  if (recentCount >= 5 && recentWinRate < 50) {
     adjustments.push('Increase confidence threshold to 75');
     adjustments.push('Reduce position size to 0.5%');
     insights.push('Recent win rate deterioration suggests strategy degradation');
@@ -242,7 +242,7 @@ export function getPortfolioIntelligence(
   const riskLevel: PortfolioIntelligenceReport['risk_level'] =
     !accountState.tradingEnabled || maxDrawdown >= config.maxDailyLossPct || accountState.dailyRealizedPnlPct <= -config.maxDailyLossPct
       ? 'HIGH'
-      : winRate < 50 || accountState.openPositionCount >= config.maxOpenPositions - 1
+      : (completedCount >= 5 && winRate < 50) || accountState.openPositionCount >= config.maxOpenPositions - 1
         ? 'MEDIUM'
         : 'LOW';
 
