@@ -5,7 +5,7 @@
 //   Heatmap | Scanner | Top 500 | Watchlist
 // ============================================================
 
-import { useState, useMemo, useEffect, useCallback } from 'react';
+import { useState, useMemo, useEffect, useCallback, useRef } from 'react';
 import { useMarketData } from '@/hooks/useMarketData';
 import { useWatchList } from '@/hooks/useWatchList';
 import { useCoinSearch, filterCoins, SignalFilter, SortField } from '@/hooks/useCoinSearch';
@@ -43,8 +43,11 @@ interface TopCoin {
 }
 
 type Top500SortField = 'volume' | 'change' | 'change_asc' | 'price';
-type DashboardTab = 'overview' | 'heatmap' | 'scanner' | 'top500' | 'patterns' | 'watchlist';
+type DashboardTab = 'overview' | 'heatmap' | 'scanner' | 'top500' | 'patterns' | 'suggestion' | 'watchlist';
 const AUTO_PLAY_INTERVAL_MS = 900;
+const TARGET_PROXIMITY_THRESHOLD = 0.998;
+const STOP_PROXIMITY_THRESHOLD = 1.002;
+const NOTIFICATION_COOLDOWN_MS = 300_000;
 
 type CandlePattern = {
   name: string;
@@ -56,6 +59,15 @@ type CandlePattern = {
 };
 
 type PatternCoinMatches = Record<string, string[]>;
+type SuggestedTradePattern = {
+  name: string;
+  side: 'LONG' | 'SHORT';
+  trigger: string;
+  entry: string;
+  stopLoss: string;
+  target: string;
+  management: string;
+};
 
 function matchesPattern(coin: { signal: 'BUY' | 'SELL' | 'HOLD'; score: number; priceChangePercent: number }, pattern: CandlePattern): boolean {
   if (pattern.bias === 'Bullish') {
@@ -213,6 +225,29 @@ const CANDLE_PATTERNS: CandlePattern[] = [
       { open: 100.5, high: 101, low: 95, close: 96 },
     ],
   },
+];
+
+const SUGGESTED_TRADE_PATTERNS: SuggestedTradePattern[] = [
+  { name: 'Bull Flag Continuation', side: 'LONG', trigger: 'Break above flag high with volume expansion', entry: 'Enter on retest of breakout zone', stopLoss: 'Below flag low', target: 'Measured move = flagpole projection', management: 'Keep entry fixed; hold until target or stop-loss hit.' },
+  { name: 'Ascending Triangle Breakout', side: 'LONG', trigger: 'Close above horizontal resistance', entry: 'Buy first pullback to breakout', stopLoss: 'Below rising trendline', target: 'Triangle height projection', management: 'No re-entries before target/SL resolution.' },
+  { name: 'Cup and Handle', side: 'LONG', trigger: 'Handle breakout above neckline', entry: 'Neckline breakout confirmation candle', stopLoss: 'Below handle low', target: 'Depth of cup projected up', management: 'Fixed plan; do not move stop wider.' },
+  { name: 'Inverse Head and Shoulders', side: 'LONG', trigger: 'Neckline break with momentum', entry: 'Break-and-close above neckline', stopLoss: 'Below right shoulder low', target: 'Head-to-neckline projection', management: 'Trail only after 50% target progress.' },
+  { name: 'Range Support Bounce', side: 'LONG', trigger: 'Bullish rejection at support', entry: 'Support reclaim candle close', stopLoss: 'Below range support', target: 'Range resistance', management: 'Exit fully at target/SL only.' },
+  { name: 'Golden Cross Pullback', side: 'LONG', trigger: 'EMA fast crosses above EMA slow', entry: 'Retest of fast EMA support', stopLoss: 'Below EMA cluster', target: 'Previous swing high', management: 'Entry remains fixed through lifecycle.' },
+  { name: 'Double Bottom', side: 'LONG', trigger: 'Break above neckline between lows', entry: 'Neckline breakout close', stopLoss: 'Below second bottom', target: 'Bottom-to-neckline distance', management: 'No averaging down.' },
+  { name: 'Falling Wedge Breakout', side: 'LONG', trigger: 'Close above wedge resistance', entry: 'Retest of broken wedge line', stopLoss: 'Below wedge low', target: 'Wedge height projection', management: 'Close if stop or target hits first.' },
+  { name: 'VWAP Reclaim Trend Day', side: 'LONG', trigger: 'Price reclaims VWAP and holds', entry: 'First pullback above VWAP', stopLoss: 'Below VWAP rejection low', target: 'Session high extension', management: 'Keep risk fixed at initial stop.' },
+  { name: 'Bullish Order Block Retest', side: 'LONG', trigger: 'Sharp displacement then retest holds', entry: 'Mitigation candle confirmation', stopLoss: 'Below order block low', target: 'Next liquidity high', management: 'Maintain original target discipline.' },
+  { name: 'Bear Flag Breakdown', side: 'SHORT', trigger: 'Break below flag base on rising sell volume', entry: 'Retest from below', stopLoss: 'Above flag high', target: 'Flagpole projection down', management: 'Fixed entry/stop/target till completion.' },
+  { name: 'Descending Triangle Breakdown', side: 'SHORT', trigger: 'Close below horizontal support', entry: 'Breakdown retest rejection', stopLoss: 'Above descending trendline', target: 'Triangle height projection down', management: 'Do not widen stop-loss.' },
+  { name: 'Head and Shoulders', side: 'SHORT', trigger: 'Neckline breakdown confirmation', entry: 'Close below neckline', stopLoss: 'Above right shoulder', target: 'Head-to-neckline projection down', management: 'Hold until SL or target is reached.' },
+  { name: 'Double Top', side: 'SHORT', trigger: 'Break below neckline after second top', entry: 'Neckline break-and-retest', stopLoss: 'Above second top', target: 'Top-to-neckline distance', management: 'No early stop movement unless in profit.' },
+  { name: 'Rising Wedge Breakdown', side: 'SHORT', trigger: 'Loss of wedge support', entry: 'Retest of broken support', stopLoss: 'Above wedge high', target: 'Wedge height projection', management: 'One setup, one outcome (TP/SL).' },
+  { name: 'Range Resistance Rejection', side: 'SHORT', trigger: 'Failed breakout at resistance', entry: 'Bearish close back in range', stopLoss: 'Above rejection wick', target: 'Range support', management: 'Fixed plan without mid-trade edits.' },
+  { name: 'Death Cross Pullback', side: 'SHORT', trigger: 'EMA fast crosses below EMA slow', entry: 'Pullback into EMA resistance', stopLoss: 'Above EMA cluster', target: 'Recent swing low', management: 'Keep predefined risk intact.' },
+  { name: 'VWAP Rejection Trend Day', side: 'SHORT', trigger: 'Price fails at VWAP repeatedly', entry: 'Bearish retest under VWAP', stopLoss: 'Above VWAP failure high', target: 'Session low extension', management: 'Target/SL are final exits.' },
+  { name: 'Bearish Order Block Rejection', side: 'SHORT', trigger: 'Mitigation into bearish supply zone', entry: 'Rejection candle close', stopLoss: 'Above order block high', target: 'Next liquidity low', management: 'No averaging into loss.' },
+  { name: 'Lower-High Breakdown Sequence', side: 'SHORT', trigger: 'Series of lower highs then support break', entry: 'Breakdown candle close', stopLoss: 'Above latest lower high', target: 'Measured leg extension', management: 'Respect fixed risk framework.' },
 ];
 
 function PatternMiniChart({
@@ -621,6 +656,43 @@ function PatternLearningCard({ pattern, coinNames }: { pattern: CandlePattern; c
   );
 }
 
+function SuggestionsPanel() {
+  const longPatterns = SUGGESTED_TRADE_PATTERNS.filter((pattern) => pattern.side === 'LONG');
+  const shortPatterns = SUGGESTED_TRADE_PATTERNS.filter((pattern) => pattern.side === 'SHORT');
+  const renderPatternCard = (pattern: SuggestedTradePattern) => (
+    <div key={`${pattern.side}-${pattern.name}`} className="rounded-xl border border-gray-700/70 bg-gray-900/60 p-3 space-y-1.5">
+      <div className="flex items-center justify-between">
+        <h4 className="text-sm font-semibold text-gray-100">{pattern.name}</h4>
+        <span className={`text-[10px] px-2 py-0.5 rounded-full border ${pattern.side === 'LONG' ? 'text-green-300 border-green-500/30 bg-green-500/10' : 'text-red-300 border-red-500/30 bg-red-500/10'}`}>
+          {pattern.side}
+        </span>
+      </div>
+      <p className="text-xs text-gray-300"><span className="text-gray-500">Trigger:</span> {pattern.trigger}</p>
+      <p className="text-xs text-cyan-200"><span className="text-cyan-400">Entry:</span> {pattern.entry}</p>
+      <p className="text-xs text-red-300"><span className="text-red-400">Stop Loss:</span> {pattern.stopLoss}</p>
+      <p className="text-xs text-green-300"><span className="text-green-400">Target:</span> {pattern.target}</p>
+      <p className="text-xs text-gray-400">{pattern.management}</p>
+    </div>
+  );
+
+  return (
+    <div className="space-y-4">
+      <div className="rounded-xl border border-gray-700/70 bg-gradient-to-r from-gray-900 via-gray-900 to-cyan-950/40 p-4">
+        <h3 className="text-sm font-semibold text-white">Professional Trade Suggestions</h3>
+        <p className="text-xs text-gray-400 mt-1">Entries are predefined per setup and should remain fixed until target is hit or stop-loss is triggered.</p>
+      </div>
+      <div>
+        <h4 className="text-sm font-semibold text-green-300 mb-2">Trending Long Patterns (10)</h4>
+        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">{longPatterns.map(renderPatternCard)}</div>
+      </div>
+      <div>
+        <h4 className="text-sm font-semibold text-red-300 mb-2">Trending Short Patterns (10)</h4>
+        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">{shortPatterns.map(renderPatternCard)}</div>
+      </div>
+    </div>
+  );
+}
+
 function ExchangeSelector({
   selectedExchanges,
   onSelectedExchangesChange,
@@ -681,16 +753,47 @@ export default function Dashboard() {
   const [patternCoinMatches, setPatternCoinMatches] = useState<PatternCoinMatches>(() => buildPatternCoinMatches(coins));
   const [patternMatchesLoading, setPatternMatchesLoading] = useState(false);
   const [patternMatchesError, setPatternMatchesError] = useState<string | null>(null);
+  const notificationCooldownRef = useRef<Record<string, number>>({});
   const selectedExchangeLabels = selectedExchanges.map((exchange) => EXCHANGE_LABELS[exchange]).join(', ');
 
   // Sync tab from URL on mount
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const tab = params.get('tab') as DashboardTab | null;
-    if (tab && ['overview', 'heatmap', 'scanner', 'top500', 'patterns', 'watchlist'].includes(tab)) {
+    if (tab && ['overview', 'heatmap', 'scanner', 'top500', 'patterns', 'suggestion', 'watchlist'].includes(tab)) {
       setActiveTab(tab);
     }
   }, []);
+
+  useEffect(() => {
+    if (typeof window === 'undefined' || !('Notification' in window) || items.length === 0) return;
+    if (Notification.permission === 'default') {
+      Notification.requestPermission().catch(() => undefined);
+    }
+  }, [items.length]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined' || !('Notification' in window) || Notification.permission !== 'granted') return;
+    const now = Date.now();
+    for (const item of items) {
+      const coin = coins.find((entry) => entry.symbol === item.symbol);
+      if (!coin) continue;
+      const movePct = ((coin.price - item.entryPrice) / item.entryPrice) * 100;
+      const nearTarget = coin.price >= item.targetPrice * TARGET_PROXIMITY_THRESHOLD;
+      const nearStop = coin.price <= item.stopLoss * STOP_PROXIMITY_THRESHOLD;
+      const significantMove = Math.abs(movePct) >= 1.5;
+      if (!nearTarget && !nearStop && !significantMove) continue;
+
+      const key = `${item.symbol}:${nearTarget ? 'target' : nearStop ? 'stop' : 'move'}`;
+      if ((notificationCooldownRef.current[key] ?? 0) + NOTIFICATION_COOLDOWN_MS > now) continue;
+      notificationCooldownRef.current[key] = now;
+
+      const status = nearTarget ? 'Target zone reached' : nearStop ? 'Stop-loss risk zone reached' : `Moved ${movePct >= 0 ? '+' : ''}${movePct.toFixed(2)}%`;
+      new Notification(`${item.symbol.replace('USDT', '')} Professional Alert`, {
+        body: `${status}. Price: ${formatPrice(coin.price)} | Entry: ${formatPrice(item.entryPrice)} | Target: ${formatPrice(item.targetPrice)} | Stop: ${formatPrice(item.stopLoss)}`,
+      });
+    }
+  }, [coins, items]);
 
   const handleTabChange = (tab: DashboardTab) => {
     setActiveTab(tab);
@@ -770,6 +873,7 @@ export default function Dashboard() {
     { id: 'scanner', label: 'Scanner' },
     { id: 'top500', label: 'Top 500' },
     { id: 'patterns', label: 'Patterns' },
+    { id: 'suggestion', label: 'Suggestion' },
     { id: 'watchlist', label: `Watchlist${items.length > 0 ? ` (${items.length})` : ''}` },
   ];
 
@@ -1027,6 +1131,20 @@ export default function Dashboard() {
               loading={patternMatchesLoading}
               error={patternMatchesError}
             />
+          </div>
+        )}
+
+        {/* Suggestions tab */}
+        {activeTab === 'suggestion' && (
+          <div>
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-lg font-semibold flex items-center gap-2">
+                <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+                Suggestions
+              </h2>
+              <span className="text-xs text-gray-500">Professional long/short setup playbook</span>
+            </div>
+            <SuggestionsPanel />
           </div>
         )}
 
