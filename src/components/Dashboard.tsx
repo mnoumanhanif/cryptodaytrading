@@ -16,6 +16,7 @@ import CoinFilter from './CoinFilter';
 import CoinHeatmap from './CoinHeatmap';
 import CoinPagination from './CoinPagination';
 import MarketOverviewPanel from './MarketOverviewPanel';
+import FuturesTradingPanel from './FuturesTradingPanel';
 import { SupportedExchange } from '@/lib/exchangeMarket';
 
 const EXCHANGE_OPTIONS: Array<{ id: SupportedExchange; label: string; envKey: string }> = [
@@ -44,7 +45,7 @@ interface TopCoin {
 }
 
 type Top500SortField = 'volume' | 'change' | 'change_asc' | 'price';
-type DashboardTab = 'overview' | 'heatmap' | 'scanner' | 'top500' | 'patterns' | 'watchlist';
+type DashboardTab = 'overview' | 'heatmap' | 'scanner' | 'top500' | 'futures' | 'patterns' | 'watchlist';
 const AUTO_PLAY_INTERVAL_MS = 900;
 
 type CandlePattern = {
@@ -629,7 +630,7 @@ export default function Dashboard() {
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const tab = params.get('tab') as DashboardTab | null;
-    if (tab && ['overview', 'heatmap', 'scanner', 'top500', 'patterns', 'watchlist'].includes(tab)) {
+    if (tab && ['overview', 'heatmap', 'scanner', 'top500', 'futures', 'patterns', 'watchlist'].includes(tab)) {
       setActiveTab(tab);
     }
   }, []);
@@ -683,6 +684,7 @@ export default function Dashboard() {
     { id: 'heatmap', label: '🔥 Heatmap' },
     { id: 'scanner', label: '📊 Scanner' },
     { id: 'top500', label: '📋 Top 500' },
+    { id: 'futures', label: '⚡ Futures' },
     { id: 'patterns', label: '🕯 Patterns' },
     { id: 'watchlist', label: `⭐ Watchlist${items.length > 0 ? ` (${items.length})` : ''}` },
   ];
@@ -905,6 +907,20 @@ export default function Dashboard() {
               <span className="text-xs text-gray-500">{selectedExchangeLabels} · 25 coins per page</span>
             </div>
             <Top500Panel selectedExchanges={selectedExchanges} isWatching={isWatching} />
+          </div>
+        )}
+
+        {/* Futures trading tab */}
+        {activeTab === 'futures' && (
+          <div>
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-lg font-semibold flex items-center gap-2">
+                <span className="w-2 h-2 rounded-full bg-teal-500 animate-pulse" />
+                Binance Futures Trading
+              </h2>
+              <span className="text-xs text-gray-500">USDT perpetual pairs · hedging mode plans</span>
+            </div>
+            <FuturesTradingPanel />
           </div>
         )}
 
