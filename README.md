@@ -1,0 +1,1 @@
+# cryto-day-trading
