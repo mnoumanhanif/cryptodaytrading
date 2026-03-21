@@ -43,8 +43,14 @@ interface TopCoin {
 }
 
 type Top500SortField = 'volume' | 'change' | 'change_asc' | 'price';
-type DashboardTab = 'overview' | 'heatmap' | 'scanner' | 'top500' | 'patterns' | 'watchlist';
+type DashboardTab = 'overview' | 'heatmap' | 'scanner' | 'top500' | 'patterns' | 'suggestions' | 'watchlist';
 const AUTO_PLAY_INTERVAL_MS = 900;
+const DEFAULT_LONG_STOP_LOSS_FACTOR = 0.985;
+const DEFAULT_LONG_TARGET_FACTOR = 1.03;
+const DEFAULT_SHORT_BASE_MOVE_FACTOR = 0.015;
+const DEFAULT_SHORT_TARGET_MULTIPLIER = 1.8;
+const MIN_NOTIFICATION_MOVE_PERCENT = 1.5;
+const MAX_WATCHLIST_NOTIFICATIONS = 6;
 
 type CandlePattern = {
   name: string;
@@ -56,6 +62,26 @@ type CandlePattern = {
 };
 
 type PatternCoinMatches = Record<string, string[]>;
+type SuggestionBias = 'LONG' | 'SHORT';
+type SuggestionTemplate = {
+  name: string;
+  setup: string;
+  confirmation: string;
+  invalidation: string;
+};
+type TradeSuggestion = {
+  patternName: string;
+  symbol: string;
+  bias: SuggestionBias;
+  entryPrice: number;
+  stopLoss: number;
+  targetPrice: number;
+  riskRewardRatio: number;
+  confidence: number;
+  setup: string;
+  confirmation: string;
+  invalidation: string;
+};
 
 function matchesPattern(coin: { signal: 'BUY' | 'SELL' | 'HOLD'; score: number; priceChangePercent: number }, pattern: CandlePattern): boolean {
   if (pattern.bias === 'Bullish') {
@@ -213,6 +239,32 @@ const CANDLE_PATTERNS: CandlePattern[] = [
       { open: 100.5, high: 101, low: 95, close: 96 },
     ],
   },
+];
+
+const LONG_SUGGESTION_TEMPLATES: SuggestionTemplate[] = [
+  { name: 'Bull Flag Breakout', setup: 'Trend continuation after shallow pullback.', confirmation: 'Close above flag resistance with volume expansion.', invalidation: 'Break below flag low.' },
+  { name: 'Ascending Triangle', setup: 'Higher lows pressing into a horizontal resistance.', confirmation: 'Break and hold above resistance level.', invalidation: 'Close back inside triangle.' },
+  { name: 'Cup and Handle', setup: 'Rounded base followed by light handle retrace.', confirmation: 'Breakout above cup rim.', invalidation: 'Handle low breaks.' },
+  { name: 'Inverse Head and Shoulders', setup: 'Three-trough reversal with rising neckline pressure.', confirmation: 'Neckline breakout and retest hold.', invalidation: 'Right-shoulder low fails.' },
+  { name: 'Falling Wedge Reversal', setup: 'Contracting downside channel losing momentum.', confirmation: 'Upside wedge breakout candle closes strong.', invalidation: 'Fresh low inside wedge.' },
+  { name: 'Retest of Broken Resistance', setup: 'Prior resistance flips into support.', confirmation: 'Support retest holds with rejection wick.', invalidation: 'Support decisively breaks.' },
+  { name: 'Volume Expansion Breakout', setup: 'Consolidation near local highs.', confirmation: 'Range breakout with above-average volume.', invalidation: 'False breakout and quick re-entry to range.' },
+  { name: 'Higher-Low Trend Continuation', setup: 'Pullback prints higher low in uptrend.', confirmation: 'Momentum resumes above prior swing high.', invalidation: 'Higher low is violated.' },
+  { name: 'Golden Cross Momentum', setup: 'Fast moving average crosses above slow average.', confirmation: 'Price sustains above both averages.', invalidation: 'Cross fails and price falls below slow MA.' },
+  { name: 'Support Bounce with RSI Reset', setup: 'Price taps support while RSI normalizes.', confirmation: 'Bullish candle closes off support.', invalidation: 'Support closes below with momentum.' },
+];
+
+const SHORT_SUGGESTION_TEMPLATES: SuggestionTemplate[] = [
+  { name: 'Bear Flag Breakdown', setup: 'Downtrend pause forms weak upward channel.', confirmation: 'Breakdown below channel support.', invalidation: 'Close above flag high.' },
+  { name: 'Descending Triangle', setup: 'Lower highs compress into flat support.', confirmation: 'Support breakdown with sell volume.', invalidation: 'Reclaim and hold above support.' },
+  { name: 'Head and Shoulders Top', setup: 'Three-peak exhaustion pattern at highs.', confirmation: 'Neckline break then failed retest.', invalidation: 'Right shoulder high is reclaimed.' },
+  { name: 'Rising Wedge Breakdown', setup: 'Weakening rally in narrowing channel.', confirmation: 'Bearish break below wedge base.', invalidation: 'Wedge high breakout.' },
+  { name: 'Double Top Rejection', setup: 'Second high fails at resistance zone.', confirmation: 'Neckline break confirms reversal.', invalidation: 'Second top breaks and holds.' },
+  { name: 'Failed Breakout Trap', setup: 'Price breaks highs then quickly reverses.', confirmation: 'Back below breakout level with momentum.', invalidation: 'Immediate reclaim of breakout level.' },
+  { name: 'Resistance Rejection', setup: 'Price rallies into heavy resistance zone.', confirmation: 'Multiple rejection wicks + lower close.', invalidation: 'Resistance converts into support.' },
+  { name: 'Lower-High Continuation', setup: 'Bear trend pullback stalls below prior high.', confirmation: 'Break below pullback low.', invalidation: 'Lower high breaks upward.' },
+  { name: 'Death Cross Momentum', setup: 'Fast moving average crosses below slow average.', confirmation: 'Price remains under both averages.', invalidation: 'Cross fails and trend reclaims MAs.' },
+  { name: 'Overbought Reversal Fade', setup: 'Sharp rally into overbought condition.', confirmation: 'Bearish engulfing near local top.', invalidation: 'Strong close above top structure.' },
 ];
 
 function PatternMiniChart({
@@ -683,11 +735,108 @@ export default function Dashboard() {
   const [patternMatchesError, setPatternMatchesError] = useState<string | null>(null);
   const selectedExchangeLabels = selectedExchanges.map((exchange) => EXCHANGE_LABELS[exchange]).join(', ');
 
+  const suggestionData = useMemo(() => {
+    const ranked = [...coins].sort((a, b) => b.score - a.score);
+    const longCandidates = ranked.filter((coin) => coin.signal !== 'SELL');
+    const shortCandidates = ranked.filter((coin) => coin.signal !== 'BUY');
+    const fallbackPool = ranked.length > 0 ? ranked : [];
+
+    const longSuggestions: TradeSuggestion[] = LONG_SUGGESTION_TEMPLATES.map((template, index) => {
+      const coin = longCandidates[index] ?? fallbackPool[index % Math.max(fallbackPool.length, 1)];
+      const entryPrice = coin?.price ?? 0;
+      const defaultStopLoss = entryPrice > 0 ? entryPrice * DEFAULT_LONG_STOP_LOSS_FACTOR : 0;
+      const defaultTargetPrice = entryPrice > 0 ? entryPrice * DEFAULT_LONG_TARGET_FACTOR : 0;
+      const stopLoss =
+        entryPrice > 0 && coin && coin.risk.stopLoss > 0 && coin.risk.stopLoss < entryPrice
+          ? coin.risk.stopLoss
+          : defaultStopLoss;
+      const targetPrice =
+        entryPrice > 0 && coin && coin.risk.targetPrice > entryPrice
+          ? coin.risk.targetPrice
+          : defaultTargetPrice;
+      const risk = entryPrice > stopLoss ? entryPrice - stopLoss : 0;
+      const reward = targetPrice > entryPrice ? targetPrice - entryPrice : 0;
+
+      return {
+        patternName: template.name,
+        symbol: coin?.symbol ?? 'N/A',
+        bias: 'LONG',
+        entryPrice,
+        stopLoss,
+        targetPrice,
+        riskRewardRatio: risk > 0 && reward > 0 ? reward / risk : 0,
+        confidence: coin?.tradeSignal.confidence ?? 0,
+        setup: template.setup,
+        confirmation: template.confirmation,
+        invalidation: template.invalidation,
+      };
+    });
+
+    const shortSuggestions: TradeSuggestion[] = SHORT_SUGGESTION_TEMPLATES.map((template, index) => {
+      const coin = shortCandidates[index] ?? fallbackPool[index % Math.max(fallbackPool.length, 1)];
+      const entryPrice = coin?.price ?? 0;
+      const baseMove = Math.max(
+        entryPrice * DEFAULT_SHORT_BASE_MOVE_FACTOR,
+        Math.abs((coin?.priceChangePercent ?? 0) / 100) * entryPrice
+      );
+      const stopLoss = entryPrice + baseMove;
+      const targetPrice = Math.max(entryPrice - baseMove * DEFAULT_SHORT_TARGET_MULTIPLIER, 0);
+      const risk = stopLoss > entryPrice ? stopLoss - entryPrice : 0;
+      const reward = entryPrice > targetPrice ? entryPrice - targetPrice : 0;
+
+      return {
+        patternName: template.name,
+        symbol: coin?.symbol ?? 'N/A',
+        bias: 'SHORT',
+        entryPrice,
+        stopLoss,
+        targetPrice,
+        riskRewardRatio: risk > 0 && reward > 0 ? reward / risk : 0,
+        confidence: coin?.tradeSignal.confidence ?? 0,
+        setup: template.setup,
+        confirmation: template.confirmation,
+        invalidation: template.invalidation,
+      };
+    });
+
+    return { longSuggestions, shortSuggestions };
+  }, [coins]);
+
+  const watchlistMoveNotifications = useMemo(() => {
+    const alerts = items
+      .map((item) => {
+        const liveCoin = coins.find((coin) => coin.symbol === item.symbol);
+        if (!liveCoin) return null;
+        const movePercent = ((liveCoin.price - item.entryPrice) / item.entryPrice) * 100;
+        const targetHit = liveCoin.price >= item.targetPrice;
+        const stopHit = liveCoin.price <= item.stopLoss;
+
+        if (!targetHit && !stopHit && Math.abs(movePercent) < MIN_NOTIFICATION_MOVE_PERCENT) return null;
+
+        return {
+          symbol: item.symbol,
+          movePercent,
+          livePrice: liveCoin.price,
+          status: targetHit ? 'TARGET HIT' : stopHit ? 'STOP LOSS HIT' : movePercent > 0 ? 'UPTREND MOMENTUM' : 'DOWNTREND MOMENTUM',
+          guidance: targetHit
+            ? 'Target reached — keep entry fixed and close per plan.'
+            : stopHit
+            ? 'Stop loss breached — close position to protect capital.'
+            : `Price moved ${movePercent.toFixed(2)}% from entry. Keep entry fixed until TP/SL trigger.`,
+        };
+      })
+      .filter((alert): alert is NonNullable<typeof alert> => Boolean(alert))
+      .sort((a, b) => Math.abs(b.movePercent) - Math.abs(a.movePercent))
+      .slice(0, MAX_WATCHLIST_NOTIFICATIONS);
+
+    return alerts;
+  }, [items, coins]);
+
   // Sync tab from URL on mount
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const tab = params.get('tab') as DashboardTab | null;
-    if (tab && ['overview', 'heatmap', 'scanner', 'top500', 'patterns', 'watchlist'].includes(tab)) {
+    if (tab && ['overview', 'heatmap', 'scanner', 'top500', 'patterns', 'suggestions', 'watchlist'].includes(tab)) {
       setActiveTab(tab);
     }
   }, []);
@@ -724,6 +873,7 @@ export default function Dashboard() {
     }
     return filterCoins(merged, query, signalFilter, sortBy);
   }, [searchResults, coins, query, signalFilter, sortBy]);
+  const scannerCoins = useMemo(() => displayCoins.slice(0, 100), [displayCoins]);
 
   useEffect(() => {
     if (activeTab !== 'patterns') return;
@@ -770,6 +920,7 @@ export default function Dashboard() {
     { id: 'scanner', label: 'Scanner' },
     { id: 'top500', label: 'Top 500' },
     { id: 'patterns', label: 'Patterns' },
+    { id: 'suggestions', label: 'Suggestions' },
     { id: 'watchlist', label: `Watchlist${items.length > 0 ? ` (${items.length})` : ''}` },
   ];
 
@@ -927,7 +1078,7 @@ export default function Dashboard() {
               <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
                 <div className="bg-gray-900 border border-gray-800 rounded-lg p-2.5">
                   <p className="text-[11px] text-gray-500">Results</p>
-                  <p className="text-sm font-semibold text-white">{displayCoins.length}</p>
+                  <p className="text-sm font-semibold text-white">{scannerCoins.length}</p>
                 </div>
                 <div className="bg-gray-900 border border-gray-800 rounded-lg p-2.5">
                   <p className="text-[11px] text-gray-500">BUY</p>
@@ -959,7 +1110,7 @@ export default function Dashboard() {
               />
 
               <MarketScanner
-                coins={displayCoins}
+                coins={scannerCoins}
                 loading={loading}
                 onAddToWatchlist={addCoin}
                 isWatching={isWatching}
@@ -1027,6 +1178,91 @@ export default function Dashboard() {
               loading={patternMatchesLoading}
               error={patternMatchesError}
             />
+          </div>
+        )}
+
+        {/* Suggestions tab */}
+        {activeTab === 'suggestions' && (
+          <div className="space-y-4">
+            <div className="flex items-center justify-between">
+              <h2 className="text-lg font-semibold flex items-center gap-2">
+                <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+                Professional Trade Suggestions
+              </h2>
+              <span className="text-xs text-gray-500">Entry price stays fixed until target or Stop Loss is hit</span>
+            </div>
+
+            <div className="rounded-lg border border-cyan-700/40 bg-cyan-900/10 px-3 py-2 text-xs text-cyan-100">
+              Professional Rule: Execute only at the listed entry price. Do not move the entry after opening. Hold the plan until the listed target or stop loss is triggered.
+            </div>
+
+            <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
+              <div className="rounded-xl border border-green-700/40 bg-green-900/10 p-3">
+                <h3 className="text-sm font-semibold text-green-300 mb-2">Top 10 Trending LONG Patterns</h3>
+                <div className="space-y-2">
+                  {suggestionData.longSuggestions.map((item) => (
+                    <div key={`${item.bias}-${item.patternName}-${item.symbol}`} className="rounded-lg border border-gray-800 bg-gray-900/70 p-2.5">
+                      <div className="flex items-center justify-between gap-2">
+                        <p className="text-xs font-semibold text-white">{item.patternName} · {item.symbol.replace('USDT', '')}</p>
+                        <span className="text-[11px] text-green-300">Conf {Math.round(item.confidence)}%</span>
+                      </div>
+                      <p className="text-[11px] text-gray-400 mt-1">{item.setup}</p>
+                      <div className="grid grid-cols-3 gap-2 mt-2 text-[11px]">
+                        <p className="text-gray-200">Entry: <span className="font-mono">{formatPrice(item.entryPrice)}</span></p>
+                        <p className="text-red-300">SL: <span className="font-mono">{formatPrice(item.stopLoss)}</span></p>
+                        <p className="text-green-300">TP: <span className="font-mono">{formatPrice(item.targetPrice)}</span></p>
+                      </div>
+                      <p className="text-[11px] text-cyan-200 mt-1">R:R {item.riskRewardRatio.toFixed(2)} · Confirm: {item.confirmation}</p>
+                      <p className="text-[11px] text-yellow-200 mt-0.5">Invalidation: {item.invalidation}</p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              <div className="rounded-xl border border-rose-700/40 bg-rose-900/10 p-3">
+                <h3 className="text-sm font-semibold text-rose-300 mb-2">Top 10 Trending SHORT Patterns</h3>
+                <div className="space-y-2">
+                  {suggestionData.shortSuggestions.map((item) => (
+                    <div key={`${item.bias}-${item.patternName}-${item.symbol}`} className="rounded-lg border border-gray-800 bg-gray-900/70 p-2.5">
+                      <div className="flex items-center justify-between gap-2">
+                        <p className="text-xs font-semibold text-white">{item.patternName} · {item.symbol.replace('USDT', '')}</p>
+                        <span className="text-[11px] text-rose-300">Conf {Math.round(item.confidence)}%</span>
+                      </div>
+                      <p className="text-[11px] text-gray-400 mt-1">{item.setup}</p>
+                      <div className="grid grid-cols-3 gap-2 mt-2 text-[11px]">
+                        <p className="text-gray-200">Entry: <span className="font-mono">{formatPrice(item.entryPrice)}</span></p>
+                        <p className="text-red-300">SL: <span className="font-mono">{formatPrice(item.stopLoss)}</span></p>
+                        <p className="text-green-300">TP: <span className="font-mono">{formatPrice(item.targetPrice)}</span></p>
+                      </div>
+                      <p className="text-[11px] text-cyan-200 mt-1">R:R {item.riskRewardRatio.toFixed(2)} · Confirm: {item.confirmation}</p>
+                      <p className="text-[11px] text-yellow-200 mt-0.5">Invalidation: {item.invalidation}</p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            <div className="rounded-xl border border-indigo-700/40 bg-indigo-900/10 p-3">
+              <h3 className="text-sm font-semibold text-indigo-300 mb-2">Selected Coin Move Notifications</h3>
+              {watchlistMoveNotifications.length === 0 ? (
+                <p className="text-xs text-gray-400">No alert-level moves on your selected coins yet. Add coins to watchlist to activate professional notifications.</p>
+              ) : (
+                <div className="space-y-2">
+                  {watchlistMoveNotifications.map((alert) => (
+                    <div key={alert.symbol} className="rounded-lg border border-gray-800 bg-gray-900/70 p-2.5">
+                      <div className="flex items-center justify-between">
+                        <p className="text-xs font-semibold text-white">{alert.symbol.replace('USDT', '')}</p>
+                        <span className={`text-[11px] ${alert.status === 'TARGET HIT' ? 'text-green-300' : alert.status === 'STOP LOSS HIT' ? 'text-red-300' : 'text-cyan-300'}`}>
+                          {alert.status}
+                        </span>
+                      </div>
+                      <p className="text-[11px] text-gray-300 mt-1">Live: <span className="font-mono">{formatPrice(alert.livePrice)}</span> · Move: {alert.movePercent >= 0 ? '+' : ''}{alert.movePercent.toFixed(2)}%</p>
+                      <p className="text-[11px] text-gray-400 mt-0.5">{alert.guidance}</p>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
           </div>
         )}
 
