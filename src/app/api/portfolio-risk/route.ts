@@ -24,7 +24,6 @@ export async function GET() {
       state: getAccountState(),
       config: DEFAULT_PORTFOLIO_RISK_CONFIG,
       summary: getPortfolioRiskSummary(),
-      intelligence,
       ...intelligence,
       timestamp: Date.now(),
     });
@@ -60,7 +59,6 @@ export async function POST(request: Request) {
     return NextResponse.json({
       state: getAccountState(),
       summary: getPortfolioRiskSummary(),
-      intelligence,
       ...intelligence,
       timestamp: Date.now(),
     });

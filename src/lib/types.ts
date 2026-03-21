@@ -336,6 +336,7 @@ export interface AccountState {
 /** Portfolio risk configuration */
 export interface PortfolioRiskConfig {
   maxDailyLossPct: number;        // e.g. 3 for 3% max daily loss
+  maxDrawdownPct: number;         // e.g. 3 for 3% max drawdown
   maxConsecutiveLosses: number;   // e.g. 4
   maxOpenPositions: number;       // e.g. 3
   maxRiskPerTradePct: number;     // max % account risk per trade, e.g. 2
