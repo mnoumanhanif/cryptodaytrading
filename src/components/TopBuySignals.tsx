@@ -8,6 +8,12 @@
 import { useState, useEffect, useCallback } from 'react';
 import { BuySignalResult, MarketAnalysisResponse } from '@/lib/types';
 import { formatPrice, formatVolume } from '@/lib/utils';
+import {
+  MIN_CONFIDENCE_THRESHOLD,
+  MIN_PROBABILITY_THRESHOLD,
+  MIN_RR_FIRST_TRADE,
+  TRENDING_MARKET_REGIME,
+} from '@/lib/tradeDecisionConfig';
 
 const isStaticExport = process.env.NEXT_PUBLIC_STATIC_EXPORT === 'true';
 const REFRESH_INTERVAL = 30_000; // 30 seconds
@@ -39,8 +45,15 @@ export default function TopBuySignals() {
           try {
             const candles = await fetchKlines(ticker.symbol, '1h', 100);
             const coin = analyzeCoin(ticker, candles);
-            if (coin.score >= 65 && coin.priceChangePercent >= 0.5) {
+            if (
+              coin.score >= 65 &&
+              coin.priceChangePercent >= 0.5 &&
+              coin.tradeSignal.confidence >= MIN_CONFIDENCE_THRESHOLD &&
+              coin.tradeSignal.probability >= MIN_PROBABILITY_THRESHOLD &&
+              coin.tradeSignal.market_regime === TRENDING_MARKET_REGIME
+            ) {
               const risk = calculateShortTermRisk(coin.price, candles);
+              if (risk.riskRewardRatio < MIN_RR_FIRST_TRADE) continue;
               const keySignals: string[] = [];
               if (coin.indicators.rsi.signal === 'oversold') keySignals.push('RSI Oversold ✓');
               if (coin.indicators.macd.crossover === 'bullish') keySignals.push('MACD Bullish ✓');

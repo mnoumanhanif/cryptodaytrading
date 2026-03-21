@@ -11,6 +11,7 @@ import {
   IndicatorResults,
   RiskTargets,
   Signal,
+  StructuredTradeDecision,
   TradeSignal,
 } from './types';
 import { calculateRSI, calculateMACD, calculateBollinger, calculateVolume, calculateMA } from './indicators';
@@ -20,10 +21,27 @@ import { calculateADX } from './indicators/adx';
 import { calculateFibonacci } from './indicators/fibonacci';
 import { calculateRiskTargets, calculateNetRiskReward, DEFAULT_COST_ASSUMPTIONS } from './risk';
 import { detectRegime } from './regime';
-import { canOpenTrade } from './portfolioRisk';
+import { canOpenTrade, getAccountState } from './portfolioRisk';
 import { logSignal } from './tradeJournal';
 import { BUY_THRESHOLD, COMPOSITE_KEYS, SELL_THRESHOLD } from './scoring';
 import { roundTo8 } from './utils';
+import {
+  RANGING_MARKET_REGIME,
+  VOLATILE_MARKET_REGIME,
+  EXTREME_VOLATILITY_THRESHOLD,
+  HIGH_VOLATILITY_POSITION_SIZE_PCT,
+  HIGH_VOLATILITY_THRESHOLD,
+  MAX_POSITION_SIZE_PCT,
+  MIN_CONFIDENCE_THRESHOLD,
+  MIN_POSITION_SIZE_PCT,
+  MIN_PROBABILITY_THRESHOLD,
+  MIN_RR_FIRST_TRADE,
+  MIN_RR_SUBSEQUENT_TRADES,
+  POSITION_SIZE_REDUCTION_PER_OPEN_TRADE,
+  MODERATE_VOLATILITY_POSITION_SIZE_PCT,
+  MODERATE_VOLATILITY_THRESHOLD,
+  MAX_DECISION_REASONS,
+} from './tradeDecisionConfig';
 
 type MarketStructure = 'higher_highs' | 'lower_lows' | 'range';
 
@@ -273,6 +291,87 @@ function orientRiskTargetsForSignal(
   };
 }
 
+function buildTradeDecision(
+  tradeSignal: TradeSignal,
+  risk: RiskTargets,
+  netRiskReward: ReturnType<typeof calculateNetRiskReward>,
+  regime: ReturnType<typeof detectRegime>,
+  rejectionReasons: string[]
+): StructuredTradeDecision {
+  const accountState = getAccountState();
+  const calculatePositionSizePct = (): number => {
+    const portfolioAdjustedSizePct = Math.min(
+      MAX_POSITION_SIZE_PCT,
+      Math.max(
+        MIN_POSITION_SIZE_PCT,
+        MAX_POSITION_SIZE_PCT - accountState.openPositionCount * POSITION_SIZE_REDUCTION_PER_OPEN_TRADE
+      )
+    );
+    const volatilityAdjustedSize =
+      regime.atrPercent > HIGH_VOLATILITY_THRESHOLD
+        ? HIGH_VOLATILITY_POSITION_SIZE_PCT
+        : regime.atrPercent > MODERATE_VOLATILITY_THRESHOLD
+          ? MODERATE_VOLATILITY_POSITION_SIZE_PCT
+          : MAX_POSITION_SIZE_PCT;
+    return Math.max(
+      MIN_POSITION_SIZE_PCT,
+      Math.min(MAX_POSITION_SIZE_PCT, portfolioAdjustedSizePct, volatilityAdjustedSize)
+    );
+  };
+  const positionSizePct = calculatePositionSizePct();
+  const hasConflictingSignals = tradeSignal.type === 'HOLD';
+  const hasSidewaysPrediction = tradeSignal.prediction === 'SIDEWAYS';
+  const hasExtremeVolatility =
+    regime.atrPercent > EXTREME_VOLATILITY_THRESHOLD || tradeSignal.market_regime === VOLATILE_MARKET_REGIME;
+  const hasLowConfidence = tradeSignal.confidence < MIN_CONFIDENCE_THRESHOLD;
+  const hasLowProbability = tradeSignal.probability < MIN_PROBABILITY_THRESHOLD;
+  const requiredRiskReward =
+    accountState.openPositionCount > 0 ? MIN_RR_SUBSEQUENT_TRADES : MIN_RR_FIRST_TRADE;
+  const hasLowRiskReward = netRiskReward.netRR < requiredRiskReward;
+  const marketRanging = regime.regime === 'ranging' || tradeSignal.market_regime === RANGING_MARKET_REGIME;
+
+  const decisionReasons: string[] = [];
+  if (hasLowConfidence) decisionReasons.push(`Confidence below required threshold (${MIN_CONFIDENCE_THRESHOLD})`);
+  if (hasLowProbability) decisionReasons.push(`Probability below required threshold (${MIN_PROBABILITY_THRESHOLD})`);
+  if (marketRanging || hasSidewaysPrediction) decisionReasons.push('Sideways/ranging market regime detected');
+  if (hasConflictingSignals) decisionReasons.push('Conflicting indicator signals (no directional edge)');
+  if (hasExtremeVolatility) decisionReasons.push('Extreme volatility detected');
+  if (hasLowRiskReward) {
+    decisionReasons.push(`Risk-reward below minimum ${requiredRiskReward.toFixed(1)} after costs`);
+  }
+  if (rejectionReasons.length > 0) decisionReasons.push(...rejectionReasons);
+
+  const decision: StructuredTradeDecision['decision'] =
+    decisionReasons.length > 0
+      ? 'NO_TRADE'
+      : tradeSignal.type === 'SELL'
+        ? 'SELL'
+        : 'BUY';
+
+  const buildDecisionReasoning = (): string[] => {
+    if (decision === 'NO_TRADE') {
+      return decisionReasons.slice(0, MAX_DECISION_REASONS);
+    }
+    return [
+      `Directional move probability ${(tradeSignal.probability * 100).toFixed(0)}% and confidence ${tradeSignal.confidence}% pass required thresholds`,
+      `Market regime ${tradeSignal.market_regime} with ATR ${regime.atrPercent.toFixed(2)}% indicates acceptable trend/volatility conditions`,
+      `Net risk-reward ${netRiskReward.netRR.toFixed(2)} exceeds required ${requiredRiskReward.toFixed(1)}`,
+    ];
+  };
+  const directionalReasoning = buildDecisionReasoning();
+
+  return {
+    decision,
+    entry_zone: [tradeSignal.entryZoneLow, tradeSignal.entryZoneHigh],
+    stop_loss: risk.stopLoss,
+    take_profits: [risk.takeProfit1, risk.takeProfit2, risk.takeProfit3],
+    risk_reward_ratio: netRiskReward.netRR,
+    position_size_pct: positionSizePct,
+    confidence: tradeSignal.confidence,
+    reasoning: directionalReasoning,
+  };
+}
+
 /** Full analysis of a single coin given its ticker data and candles */
 export function analyzeCoin(ticker: BinanceTicker, candles: Candle[]): CoinAnalysis {
   const price = parseFloat(ticker.lastPrice);
@@ -330,6 +429,7 @@ export function analyzeEnhanced(
   // Portfolio risk check & rejection reasons
   const portfolioCheck = canOpenTrade(netRiskReward, regime);
   const rejectionReasons = portfolioCheck.reasons;
+  const tradeDecision = buildTradeDecision(tradeSignal, base.risk, netRiskReward, regime, rejectionReasons);
 
   // Enhanced trade signal
   const enhancedTradeSignal: EnhancedTradeSignal = {
@@ -337,6 +437,7 @@ export function analyzeEnhanced(
     netRiskReward,
     regime,
     rejectionReasons,
+    tradeDecision,
   };
 
   // Log BUY signals to the trade journal

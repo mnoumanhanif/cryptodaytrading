@@ -14,6 +14,11 @@ import { calculateShortTermRisk, calculateNetRiskReward, DEFAULT_COST_ASSUMPTION
 import { detectRegime } from '@/lib/regime';
 import { getPortfolioRiskSummary } from '@/lib/portfolioRisk';
 import {
+  MIN_CONFIDENCE_THRESHOLD,
+  MIN_PROBABILITY_THRESHOLD,
+  MIN_RR_FIRST_TRADE,
+} from '@/lib/tradeDecisionConfig';
+import {
   BinanceTicker,
   EnhancedBuySignalResult,
   EnhancedCoinAnalysis,
@@ -53,15 +58,19 @@ function preFilterCandidates(
  * for 1-2 hour short-term trading.
  */
 function isShortTermCandidate(coin: EnhancedCoinAnalysis): boolean {
-  const { indicators, score, priceChangePercent } = coin;
+  const { indicators, score, priceChangePercent, tradeSignal, enhancedTradeSignal } = coin;
   // Minimum composite score
   if (score < 65) return false;
+  if (tradeSignal.confidence < MIN_CONFIDENCE_THRESHOLD) return false;
+  if (tradeSignal.probability < MIN_PROBABILITY_THRESHOLD) return false;
   // Positive 24h momentum — relaxed to +0.5% to capture coins that are
   // just beginning to trend up; the stricter indicator filters below
   // weed out false positives.
   if (priceChangePercent < 0.5) return false;
   // Volume above average
   if (indicators.volume.volumeRatio < 1.2) return false;
+  if (enhancedTradeSignal.netRiskReward.netRR < MIN_RR_FIRST_TRADE) return false;
+  if (enhancedTradeSignal.tradeDecision.decision === 'NO_TRADE') return false;
   // At least one bullish confirmation from key indicators
   const bullishSignals = [
     indicators.rsi.value < 60,                            // RSI not overbought
@@ -155,6 +164,7 @@ function buildBuySignal(
     costAssumptions: DEFAULT_COST_ASSUMPTIONS,
     rejectionReasons: coin.rejectionReasons,
     breakEvenMovePct: shortTermNetRR.breakEvenMovePct,
+    tradeDecision: coin.enhancedTradeSignal.tradeDecision,
   };
 }
 

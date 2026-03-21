@@ -25,6 +25,7 @@ interface OverviewTradeRow {
   stopLoss: number;
   support: number | null;
   resistance: number | null;
+  tradeDecision: EnhancedCoinAnalysis['enhancedTradeSignal']['tradeDecision'];
 }
 
 interface OverviewResponse {
@@ -78,6 +79,7 @@ function toOverviewRow(coin: EnhancedCoinAnalysis, exchange: SupportedExchange):
     stopLoss: coin.risk.stopLoss,
     support: coin.indicators.fibonacci?.nearestSupport ?? null,
     resistance: coin.indicators.fibonacci?.nearestResistance ?? null,
+    tradeDecision: coin.enhancedTradeSignal.tradeDecision,
   };
 }
 
