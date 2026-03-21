@@ -41,7 +41,6 @@ const EXCHANGE_LABELS: Record<SupportedExchange, string> = {
   binance: 'Binance',
   bybit: 'Bybit',
   bitget: 'Bitget',
-  mexc: 'MEXC',
 };
 
 interface MarketOverviewPanelProps {
@@ -179,13 +178,13 @@ export default function MarketOverviewPanel({ selectedExchanges }: MarketOvervie
 
       <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
         <TrendTable
-          title="Top 100 Uptrend Coins"
+          title="Top 500 Uptrend Coins"
           rows={overview.uptrend}
           trendColor="text-green-400"
           positive
         />
         <TrendTable
-          title="Top 100 Downtrend Coins"
+          title="Top 500 Downtrend Coins"
           rows={overview.downtrend}
           trendColor="text-red-400"
           positive={false}

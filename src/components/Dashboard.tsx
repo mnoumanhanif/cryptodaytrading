@@ -16,20 +16,18 @@ import CoinFilter from './CoinFilter';
 import CoinHeatmap from './CoinHeatmap';
 import CoinPagination from './CoinPagination';
 import MarketOverviewPanel from './MarketOverviewPanel';
-import FuturesTradingPanel from './FuturesTradingPanel';
 import { SupportedExchange } from '@/lib/exchangeMarket';
 
 const EXCHANGE_OPTIONS: Array<{ id: SupportedExchange; label: string; envKey: string }> = [
   { id: 'binance', label: 'Binance API Key', envKey: 'BINANCE_API_KEY' },
+  { id: 'bybit', label: 'Bybit API Key', envKey: 'BYBIT_API_KEY' },
   { id: 'bitget', label: 'Bitget API Key', envKey: 'BITGET_API_KEY' },
-  { id: 'mexc', label: 'MEXC API Key', envKey: 'MEXC_API_KEY' },
 ];
 
 const EXCHANGE_LABELS: Record<SupportedExchange, string> = {
   binance: 'Binance',
   bybit: 'Bybit',
   bitget: 'Bitget',
-  mexc: 'MEXC',
 };
 
 // ── Top-500 lightweight coin row ────────────────────────────
@@ -45,7 +43,7 @@ interface TopCoin {
 }
 
 type Top500SortField = 'volume' | 'change' | 'change_asc' | 'price';
-type DashboardTab = 'overview' | 'heatmap' | 'scanner' | 'top500' | 'futures' | 'patterns' | 'watchlist';
+type DashboardTab = 'overview' | 'heatmap' | 'scanner' | 'top500' | 'patterns' | 'watchlist';
 const AUTO_PLAY_INTERVAL_MS = 900;
 
 type CandlePattern = {
@@ -56,6 +54,43 @@ type CandlePattern = {
   riskHint: string;
   candles: { open: number; high: number; low: number; close: number }[];
 };
+
+type PatternCoinMatches = Record<string, string[]>;
+
+function matchesPattern(coin: { signal: 'BUY' | 'SELL' | 'HOLD'; score: number; priceChangePercent: number }, pattern: CandlePattern): boolean {
+  if (pattern.bias === 'Bullish') {
+    return coin.signal === 'BUY' && coin.score >= 50;
+  }
+  if (pattern.bias === 'Bearish') {
+    return coin.signal === 'SELL' && coin.score >= 50;
+  }
+  return coin.signal === 'HOLD' || Math.abs(coin.priceChangePercent) < 1;
+}
+
+function buildPatternCoinMatches(
+  coins: Array<{ symbol: string; signal: 'BUY' | 'SELL' | 'HOLD'; score: number; priceChangePercent: number }>
+): PatternCoinMatches {
+  return CANDLE_PATTERNS.reduce<PatternCoinMatches>((acc, pattern) => {
+    const names = coins
+      .filter((coin) => matchesPattern(coin, pattern))
+      .sort((a, b) => Math.abs(b.priceChangePercent) - Math.abs(a.priceChangePercent))
+      .slice(0, 3)
+      .map((coin) => coin.symbol.replace('USDT', ''));
+    acc[pattern.name] = names;
+    return acc;
+  }, {});
+}
+
+async function fetchBinancePatternMatches(): Promise<PatternCoinMatches> {
+  const response = await fetch('/api/scanner?exchanges=binance&limit=120', { cache: 'no-store' });
+  if (!response.ok) {
+    throw new Error(`HTTP ${response.status}`);
+  }
+  const data = (await response.json()) as {
+    coins?: Array<{ symbol: string; signal: 'BUY' | 'SELL' | 'HOLD'; score: number; priceChangePercent: number }>;
+  };
+  return buildPatternCoinMatches(data.coins ?? []);
+}
 
 const CANDLE_PATTERNS: CandlePattern[] = [
   {
@@ -451,7 +486,15 @@ function Top500Panel({
   );
 }
 
-function CandlePatternsPanel() {
+function CandlePatternsPanel({
+  patternCoinMatches,
+  loading,
+  error,
+}: {
+  patternCoinMatches: PatternCoinMatches;
+  loading: boolean;
+  error: string | null;
+}) {
   return (
     <div className="space-y-4">
       <div className="rounded-xl border border-gray-700/70 bg-gradient-to-r from-gray-900 via-gray-900 to-indigo-950/40 p-4">
@@ -459,12 +502,20 @@ function CandlePatternsPanel() {
         <p className="text-xs text-gray-400 mt-1">
           Use these as contextual indicators, not standalone signals. Always confirm with volume, structure, and risk limits.
         </p>
+        <p className="text-xs text-cyan-300/90 mt-2">
+          {loading ? 'Scanning Binance for live pattern candidates…' : 'Live Binance coin candidates are listed under each pattern.'}
+        </p>
+        {error && <p className="text-xs text-yellow-300/90 mt-1">Using fallback matches: {error}</p>}
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
         {CANDLE_PATTERNS.map((pattern) => {
           return (
-            <PatternLearningCard key={pattern.name} pattern={pattern} />
+            <PatternLearningCard
+              key={pattern.name}
+              pattern={pattern}
+              coinNames={patternCoinMatches[pattern.name] ?? []}
+            />
           );
         })}
       </div>
@@ -472,7 +523,7 @@ function CandlePatternsPanel() {
   );
 }
 
-function PatternLearningCard({ pattern }: { pattern: CandlePattern }) {
+function PatternLearningCard({ pattern, coinNames }: { pattern: CandlePattern; coinNames: string[] }) {
   const [visibleCandles, setVisibleCandles] = useState(1);
   const [autoPlay, setAutoPlay] = useState(false);
   const totalCandles = pattern.candles.length;
@@ -517,6 +568,9 @@ function PatternLearningCard({ pattern }: { pattern: CandlePattern }) {
       <div className="rounded-lg border border-cyan-500/20 bg-cyan-500/5 px-2.5 py-2">
         <p className="text-[11px] text-cyan-200">
           Simulation: Candle {visibleCandles} / {totalCandles} · {simulationState}
+        </p>
+        <p className="text-[11px] text-cyan-300/90 mt-1">
+          Binance coins currently matching: {coinNames.length > 0 ? coinNames.join(', ') : 'No clear match right now'}
         </p>
       </div>
 
@@ -623,14 +677,17 @@ export default function Dashboard() {
   const [query, setQuery] = useState('');
   const [signalFilter, setSignalFilter] = useState<SignalFilter>('ALL');
   const [sortBy, setSortBy] = useState<SortField>('score');
-  const [activeTab, setActiveTab] = useState<DashboardTab>('scanner');
+  const [activeTab, setActiveTab] = useState<DashboardTab>('overview');
+  const [patternCoinMatches, setPatternCoinMatches] = useState<PatternCoinMatches>(() => buildPatternCoinMatches(coins));
+  const [patternMatchesLoading, setPatternMatchesLoading] = useState(false);
+  const [patternMatchesError, setPatternMatchesError] = useState<string | null>(null);
   const selectedExchangeLabels = selectedExchanges.map((exchange) => EXCHANGE_LABELS[exchange]).join(', ');
 
   // Sync tab from URL on mount
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const tab = params.get('tab') as DashboardTab | null;
-    if (tab && ['overview', 'heatmap', 'scanner', 'top500', 'futures', 'patterns', 'watchlist'].includes(tab)) {
+    if (tab && ['overview', 'heatmap', 'scanner', 'top500', 'patterns', 'watchlist'].includes(tab)) {
       setActiveTab(tab);
     }
   }, []);
@@ -668,6 +725,34 @@ export default function Dashboard() {
     return filterCoins(merged, query, signalFilter, sortBy);
   }, [searchResults, coins, query, signalFilter, sortBy]);
 
+  useEffect(() => {
+    if (activeTab !== 'patterns') return;
+    let cancelled = false;
+    setPatternMatchesLoading(true);
+    setPatternMatchesError(null);
+    fetchBinancePatternMatches()
+      .then((matches) => {
+        if (!cancelled) {
+          setPatternCoinMatches(matches);
+        }
+      })
+      .catch((err) => {
+        if (!cancelled) {
+          setPatternMatchesError(err instanceof Error ? err.message : 'Failed to fetch Binance pattern matches');
+          setPatternCoinMatches(buildPatternCoinMatches(coins));
+        }
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setPatternMatchesLoading(false);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [activeTab, coins]);
+
   // Count signals in a single pass instead of three separate filter calls
   const { buyCount, sellCount, holdCount } = useMemo(() => {
     let buy = 0, sell = 0, hold = 0;
@@ -680,13 +765,12 @@ export default function Dashboard() {
   }, [coins]);
 
   const TABS: { id: DashboardTab; label: string }[] = [
-    { id: 'overview', label: '🌐 Overview' },
-    { id: 'heatmap', label: '🔥 Heatmap' },
-    { id: 'scanner', label: '📊 Scanner' },
-    { id: 'top500', label: '📋 Top 500' },
-    { id: 'futures', label: '⚡ Futures' },
-    { id: 'patterns', label: '🕯 Patterns' },
-    { id: 'watchlist', label: `⭐ Watchlist${items.length > 0 ? ` (${items.length})` : ''}` },
+    { id: 'overview', label: 'Overview' },
+    { id: 'heatmap', label: 'Heatmap' },
+    { id: 'scanner', label: 'Scanner' },
+    { id: 'top500', label: 'Top 500' },
+    { id: 'patterns', label: 'Patterns' },
+    { id: 'watchlist', label: `Watchlist${items.length > 0 ? ` (${items.length})` : ''}` },
   ];
 
   return (
@@ -696,7 +780,7 @@ export default function Dashboard() {
         <div className="max-w-7xl mx-auto px-4 py-3 flex items-center justify-between">
           <div className="flex items-center gap-3">
             <h1 className="text-xl font-bold bg-gradient-to-r from-blue-400 to-cyan-400 bg-clip-text text-transparent">
-              CryptoScanner
+              Crypto Trading Dashboard
             </h1>
             <span className="text-xs text-gray-500 hidden sm:inline">
               Technical Analysis Dashboard
@@ -910,20 +994,6 @@ export default function Dashboard() {
           </div>
         )}
 
-        {/* Futures trading tab */}
-        {activeTab === 'futures' && (
-          <div>
-            <div className="flex items-center justify-between mb-4">
-              <h2 className="text-lg font-semibold flex items-center gap-2">
-                <span className="w-2 h-2 rounded-full bg-teal-500 animate-pulse" />
-                Binance Futures Trading
-              </h2>
-              <span className="text-xs text-gray-500">USDT perpetual pairs · hedging mode plans</span>
-            </div>
-            <FuturesTradingPanel />
-          </div>
-        )}
-
         {/* Candlestick patterns tab */}
         {activeTab === 'patterns' && (
           <div>
@@ -932,7 +1002,7 @@ export default function Dashboard() {
                 <span className="w-2 h-2 rounded-full bg-cyan-500 animate-pulse" />
                 Trader Learning Center
               </h2>
-              <span className="text-xs text-gray-500">{selectedExchangeLabels} context + pattern playbook</span>
+              <span className="text-xs text-gray-500">Binance context + pattern playbook</span>
             </div>
             <div className="grid grid-cols-2 md:grid-cols-5 gap-2 mb-4">
               {[...coins]
@@ -952,7 +1022,11 @@ export default function Dashboard() {
                   </div>
                 ))}
             </div>
-            <CandlePatternsPanel />
+            <CandlePatternsPanel
+              patternCoinMatches={patternCoinMatches}
+              loading={patternMatchesLoading}
+              error={patternMatchesError}
+            />
           </div>
         )}
 
