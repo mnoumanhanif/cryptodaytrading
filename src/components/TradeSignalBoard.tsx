@@ -19,7 +19,7 @@ interface CandleLike {
   low: number;
 }
 
-const LEVEL_TIMEFRAMES = ['1m', '15m', '1h', '4h', '1d'] as const;
+const LEVEL_TIMEFRAMES = ['15m', '1h', '4h'] as const;
 function formatLevelOutput(levels: Level[] | undefined, labelPrefix: 'S' | 'R') {
   return [0, 1, 2]
     .map((idx) => {
@@ -233,13 +233,13 @@ export default function TradeSignalBoard({ coin }: Props) {
           <span className="text-green-400 font-semibold">Support (S1, S2, S3): </span>
           {levels
             ? formatLevelOutput(levels.supports, 'S')
-            : 'Loading 1m/15m/1h/4h/1d levels...'}
+            : 'Loading 15m/1h/4h levels...'}
         </div>
         <div className="text-xs text-gray-300">
           <span className="text-red-400 font-semibold">Resistance (R1, R2, R3): </span>
           {levels
             ? formatLevelOutput(levels.resistances, 'R')
-            : 'Loading 1m/15m/1h/4h/1d levels...'}
+            : 'Loading 15m/1h/4h levels...'}
         </div>
       </div>
 
