@@ -338,6 +338,7 @@ export interface PortfolioRiskConfig {
   maxDailyLossPct: number;        // e.g. 3 for 3% max daily loss
   maxConsecutiveLosses: number;   // e.g. 4
   maxOpenPositions: number;       // e.g. 3
+  maxRiskPerTradePct: number;     // max % account risk per trade, e.g. 2
   minNetRR: number;               // minimum net RR after costs, e.g. 1.5
   maxAtrPercent: number;          // max ATR% to allow trades, e.g. 8
 }
@@ -346,6 +347,25 @@ export interface PortfolioRiskConfig {
 export interface PortfolioRiskCheck {
   allowed: boolean;
   reasons: string[];              // rejection reasons if not allowed
+}
+
+export type PortfolioStatus = 'SAFE' | 'WARNING' | 'CRITICAL';
+export type PortfolioRiskLevel = 'LOW' | 'MEDIUM' | 'HIGH';
+
+export interface PortfolioPerformanceSummary {
+  win_rate: number;
+  avg_rr: number;
+  drawdown: number;
+  sharpe_like: number;
+}
+
+export interface PortfolioIntelligenceReport {
+  portfolio_status: PortfolioStatus;
+  trading_enabled: boolean;
+  risk_level: PortfolioRiskLevel;
+  adjustments: string[];
+  performance_summary: PortfolioPerformanceSummary;
+  insights: string[];
 }
 
 // ============================================================

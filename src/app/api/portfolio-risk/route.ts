@@ -10,6 +10,7 @@ import {
   updateAccountState,
   setTradingEnabled,
   getPortfolioRiskSummary,
+  getPortfolioIntelligence,
   DEFAULT_PORTFOLIO_RISK_CONFIG,
 } from '@/lib/portfolioRisk';
 
@@ -18,10 +19,13 @@ export const maxDuration = 10;
 
 export async function GET() {
   try {
+    const intelligence = getPortfolioIntelligence();
     return NextResponse.json({
       state: getAccountState(),
       config: DEFAULT_PORTFOLIO_RISK_CONFIG,
       summary: getPortfolioRiskSummary(),
+      intelligence,
+      ...intelligence,
       timestamp: Date.now(),
     });
   } catch (error) {
@@ -52,9 +56,12 @@ export async function POST(request: Request) {
       updateAccountState(updates);
     }
 
+    const intelligence = getPortfolioIntelligence();
     return NextResponse.json({
       state: getAccountState(),
       summary: getPortfolioRiskSummary(),
+      intelligence,
+      ...intelligence,
       timestamp: Date.now(),
     });
   } catch (error) {

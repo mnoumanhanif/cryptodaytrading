@@ -6,11 +6,13 @@
 
 import {
   AccountState,
+  PortfolioIntelligenceReport,
   NetRiskReward,
   PortfolioRiskCheck,
   PortfolioRiskConfig,
   RegimeResult,
 } from './types';
+import { getJournalEntries } from './tradeJournal';
 
 // ============================================================
 // Default configuration
@@ -19,6 +21,7 @@ export const DEFAULT_PORTFOLIO_RISK_CONFIG: PortfolioRiskConfig = {
   maxDailyLossPct: 3,        // 3% max daily loss
   maxConsecutiveLosses: 4,   // 4 consecutive losses → pause
   maxOpenPositions: 3,       // max 3 open positions at once
+  maxRiskPerTradePct: 2,     // max 2% account risk per trade
   minNetRR: 1.5,             // minimum 1.5 net RR after costs
   maxAtrPercent: 8,          // reject if ATR% > 8 (extreme volatility)
 };
@@ -140,5 +143,130 @@ export function getPortfolioRiskSummary(
   return {
     tradingEnabled: accountState.tradingEnabled,
     dailyLossCapReached: accountState.dailyRealizedPnlPct <= -config.maxDailyLossPct,
+  };
+}
+
+function roundTo1(value: number): number {
+  return Math.round(value * 10) / 10;
+}
+
+export function getPortfolioIntelligence(
+  config: PortfolioRiskConfig = DEFAULT_PORTFOLIO_RISK_CONFIG
+): PortfolioIntelligenceReport {
+  maybeResetDaily();
+  const entries = getJournalEntries().filter((entry) => entry.outcome !== 'PENDING');
+  const completedCount = entries.length;
+  const wins = entries.filter((entry) => entry.outcome === 'TP1' || entry.outcome === 'TP2' || entry.outcome === 'TP3');
+  const losses = entries.filter((entry) => entry.realizedPnlPct !== undefined && entry.realizedPnlPct < 0);
+  const avgRR = completedCount > 0
+    ? entries.reduce((sum, entry) => sum + entry.netRR, 0) / completedCount
+    : 0;
+  const winRate = completedCount > 0 ? (wins.length / completedCount) * 100 : 0;
+  const pnlSeries = entries
+    .map((entry) => entry.realizedPnlPct)
+    .filter((value): value is number => typeof value === 'number');
+
+  let peak = 0;
+  let cumulative = 0;
+  let maxDrawdown = 0;
+  for (const pnl of pnlSeries) {
+    cumulative += pnl;
+    if (cumulative > peak) peak = cumulative;
+    const drawdown = peak - cumulative;
+    if (drawdown > maxDrawdown) maxDrawdown = drawdown;
+  }
+
+  const mean = pnlSeries.length > 0 ? pnlSeries.reduce((sum, pnl) => sum + pnl, 0) / pnlSeries.length : 0;
+  const variance = pnlSeries.length > 1
+    ? pnlSeries.reduce((sum, pnl) => sum + (pnl - mean) ** 2, 0) / (pnlSeries.length - 1)
+    : 0;
+  const stdDev = variance > 0 ? Math.sqrt(variance) : 0;
+  const sharpeLike = stdDev > 0 ? mean / stdDev : 0;
+
+  const dailyLossCapReached = accountState.dailyRealizedPnlPct <= -config.maxDailyLossPct;
+  const drawdownExceeded = maxDrawdown >= config.maxDailyLossPct;
+  const lossesExceeded = accountState.consecutiveLosses >= config.maxConsecutiveLosses;
+  const killSwitchCondition = dailyLossCapReached || drawdownExceeded || lossesExceeded;
+  if (killSwitchCondition) {
+    accountState.tradingEnabled = false;
+  }
+
+  const adjustments: string[] = [];
+  const insights: string[] = [];
+  const recent = entries.slice(-20);
+  const recentCount = recent.length;
+  const recentWins = recentCount > 0 ? recent.filter((entry) => entry.outcome === 'TP1' || entry.outcome === 'TP2' || entry.outcome === 'TP3').length : 0;
+  const recentWinRate = recentCount > 0 ? (recentWins / recentCount) * 100 : winRate;
+  const regimeStats = recent.reduce<Record<string, { wins: number; total: number }>>((acc, entry) => {
+    const key = entry.regime;
+    if (!acc[key]) acc[key] = { wins: 0, total: 0 };
+    acc[key].total += 1;
+    if (entry.outcome === 'TP1' || entry.outcome === 'TP2' || entry.outcome === 'TP3') {
+      acc[key].wins += 1;
+    }
+    return acc;
+  }, {});
+
+  if (lossesExceeded) {
+    adjustments.push(`Consecutive losses reached ${accountState.consecutiveLosses}; trading disabled`);
+  }
+  if (drawdownExceeded) {
+    adjustments.push(`Drawdown ${roundTo1(maxDrawdown)}% exceeds ${config.maxDailyLossPct}% limit; kill switch engaged`);
+  }
+  if (dailyLossCapReached) {
+    adjustments.push(`Daily loss ${roundTo1(Math.abs(accountState.dailyRealizedPnlPct))}% hit cap; stop trading`);
+  }
+  if (accountState.openPositionCount >= config.maxOpenPositions) {
+    adjustments.push(`Reduce new trades: max open positions is ${config.maxOpenPositions}`);
+  }
+  if (recentWinRate < 50) {
+    adjustments.push('Increase confidence threshold to 75');
+    adjustments.push('Reduce position size to 0.5%');
+    insights.push('Recent win rate deterioration suggests strategy degradation');
+  }
+  if (accountState.openPositionCount >= Math.max(1, config.maxOpenPositions - 1)) {
+    adjustments.push('Potential overtrading detected; throttle new entries');
+    insights.push('Open-position pressure indicates overtrading behavior');
+  }
+  if (regimeStats.ranging && regimeStats.ranging.total >= 5) {
+    const rangingWinRate = (regimeStats.ranging.wins / regimeStats.ranging.total) * 100;
+    if (rangingWinRate < winRate) {
+      adjustments.push('Conservative mode: tighten filters in sideways markets');
+      insights.push('Strategy underperforming in sideways market');
+    }
+  }
+  if ((regimeStats.trending_up?.total ?? 0) + (regimeStats.trending_down?.total ?? 0) >= 5) {
+    insights.push('Aggressive mode favored during trending regimes');
+  }
+
+  const riskLevel: PortfolioIntelligenceReport['risk_level'] =
+    !accountState.tradingEnabled || maxDrawdown >= config.maxDailyLossPct || accountState.dailyRealizedPnlPct <= -config.maxDailyLossPct
+      ? 'HIGH'
+      : winRate < 50 || accountState.openPositionCount >= config.maxOpenPositions - 1
+        ? 'MEDIUM'
+        : 'LOW';
+
+  const portfolioStatus: PortfolioIntelligenceReport['portfolio_status'] =
+    riskLevel === 'HIGH' ? 'CRITICAL' : riskLevel === 'MEDIUM' ? 'WARNING' : 'SAFE';
+
+  if (adjustments.length === 0) {
+    adjustments.push('No immediate changes required; continue current risk controls');
+  }
+  if (insights.length === 0) {
+    insights.push('Performance stable under current market conditions');
+  }
+
+  return {
+    portfolio_status: portfolioStatus,
+    trading_enabled: accountState.tradingEnabled,
+    risk_level: riskLevel,
+    adjustments,
+    performance_summary: {
+      win_rate: roundTo1(winRate),
+      avg_rr: roundTo1(avgRR),
+      drawdown: roundTo1(maxDrawdown),
+      sharpe_like: roundTo1(sharpeLike),
+    },
+    insights,
   };
 }
