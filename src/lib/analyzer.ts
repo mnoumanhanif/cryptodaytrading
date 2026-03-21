@@ -291,7 +291,8 @@ function buildTradeDecision(
   const hasExtremeVolatility = regime.atrPercent > 8 || tradeSignal.market_regime === 'VOLATILE';
   const hasLowConfidence = tradeSignal.confidence < 70;
   const hasLowProbability = tradeSignal.probability < 0.6;
-  const hasLowRiskReward = netRiskReward.netRR < 1.5;
+  const requiredRiskReward = accountState.openPositionCount > 0 ? 2 : 1.5;
+  const hasLowRiskReward = netRiskReward.netRR < requiredRiskReward;
   const marketRanging = regime.regime === 'ranging' || tradeSignal.market_regime === 'RANGING';
 
   const decisionReasons: string[] = [];
@@ -300,7 +301,9 @@ function buildTradeDecision(
   if (marketRanging || hasSidewaysPrediction) decisionReasons.push('Sideways/ranging market regime detected');
   if (hasConflictingSignals) decisionReasons.push('Conflicting indicator signals (no directional edge)');
   if (hasExtremeVolatility) decisionReasons.push('Extreme volatility detected');
-  if (hasLowRiskReward) decisionReasons.push('Risk-reward below minimum 1.5 after costs');
+  if (hasLowRiskReward) {
+    decisionReasons.push(`Risk-reward below minimum ${requiredRiskReward.toFixed(1)} after costs`);
+  }
   if (rejectionReasons.length > 0) decisionReasons.push(...rejectionReasons);
 
   const decision: StructuredTradeDecision['decision'] =
