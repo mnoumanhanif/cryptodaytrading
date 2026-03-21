@@ -126,11 +126,16 @@ export async function GET(request: Request) {
       }
     }
 
-    coins.sort((a, b) => b.score - a.score);
+    const qualityFilteredCoins = coins.filter((coin) => {
+      const hasLowLiquidity = coin.tradeSignal.risk_flags.includes('Low liquidity');
+      const hasManipulationRisk = coin.tradeSignal.risk_flags.includes('Abnormal price spikes detected');
+      return !hasLowLiquidity && !hasManipulationRisk;
+    });
+    qualityFilteredCoins.sort((a, b) => b.score - a.score);
 
     const endTime = Date.now();
     const response: EnhancedScannerResponse = {
-      coins,
+      coins: qualityFilteredCoins,
       timestamp: endTime,
       totalScanned: successful.reduce((acc, item) => acc + item.tickers.length, 0),
       portfolioRisk: getPortfolioRiskSummary(),
@@ -141,7 +146,7 @@ export async function GET(request: Request) {
       lastFetchTime: endTime,
     });
 
-    let filteredCoins = coins;
+    let filteredCoins = qualityFilteredCoins;
     if (signalFilter) filteredCoins = filteredCoins.filter((c) => c.signal === signalFilter);
     filteredCoins = sortCoins(filteredCoins, sortBy).slice(0, limit);
 

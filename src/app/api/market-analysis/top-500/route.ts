@@ -124,6 +124,12 @@ function buildBuySignal(
   return {
     rank,
     symbol: coin.symbol,
+    prediction: coin.tradeSignal.prediction,
+    probability: coin.tradeSignal.probability,
+    confidence: coin.tradeSignal.confidence,
+    market_regime: coin.tradeSignal.market_regime,
+    key_factors: coin.tradeSignal.key_factors,
+    risk_flags: coin.tradeSignal.risk_flags,
     currentPrice: price,
     entryZoneLow: coin.tradeSignal.entryZoneLow,
     entryZoneHigh: coin.tradeSignal.entryZoneHigh,
