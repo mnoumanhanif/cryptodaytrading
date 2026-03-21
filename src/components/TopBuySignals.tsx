@@ -39,13 +39,21 @@ export default function TopBuySignals() {
           try {
             const candles = await fetchKlines(ticker.symbol, '1h', 100);
             const coin = analyzeCoin(ticker, candles);
-            if (coin.score >= 65 && coin.priceChangePercent >= 0.5) {
+            if (
+              coin.score >= 65 &&
+              coin.priceChangePercent >= 0.5 &&
+              coin.tradeSignal.confidence >= 70 &&
+              coin.tradeSignal.probability >= 0.6 &&
+              coin.tradeSignal.market_regime === 'TRENDING'
+            ) {
               const risk = calculateShortTermRisk(coin.price, candles);
               const keySignals: string[] = [];
               if (coin.indicators.rsi.signal === 'oversold') keySignals.push('RSI Oversold ✓');
               if (coin.indicators.macd.crossover === 'bullish') keySignals.push('MACD Bullish ✓');
               if (coin.indicators.volume.spike) keySignals.push('Vol Spike ✓');
               if (coin.indicators.ma.goldenCross) keySignals.push('EMA Golden Cross ✓');
+              const riskRewardRatio = risk.riskRewardRatio;
+              if (riskRewardRatio < 1.5) continue;
               results.push({
                 rank: 0,
                 symbol: coin.symbol,

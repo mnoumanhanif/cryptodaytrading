@@ -164,6 +164,18 @@ export interface TradeSignal {
   rationale: string[];
 }
 
+/** Structured decision payload for execution-grade trade filtering */
+export interface StructuredTradeDecision {
+  decision: 'BUY' | 'SELL' | 'NO_TRADE';
+  entry_zone: [number, number];
+  stop_loss: number;
+  take_profits: [number, number, number];
+  risk_reward_ratio: number;
+  position_size_pct: number;
+  confidence: number;
+  reasoning: string[];
+}
+
 /** Full analysis for a single coin */
 export interface CoinAnalysis {
   symbol: string;
@@ -376,6 +388,7 @@ export interface EnhancedTradeSignal extends TradeSignal {
   netRiskReward: NetRiskReward;
   regime: RegimeResult;
   rejectionReasons: string[];     // reasons signal was filtered/downgraded
+  tradeDecision: StructuredTradeDecision;
 }
 
 /** Enhanced coin analysis with execution realism */
@@ -394,6 +407,7 @@ export interface EnhancedBuySignalResult extends BuySignalResult {
   costAssumptions: CostAssumptions;
   rejectionReasons: string[];
   breakEvenMovePct: number;
+  tradeDecision: StructuredTradeDecision;
 }
 
 /** Enhanced scanner response */
