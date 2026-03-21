@@ -156,6 +156,11 @@ export interface TradeSignal {
   entryZoneLow: number;
   entryZoneHigh: number;
   confidence: number;
+  prediction: 'UP' | 'DOWN' | 'SIDEWAYS';
+  probability: number; // 0-1
+  market_regime: 'TRENDING' | 'RANGING' | 'VOLATILE';
+  key_factors: string[];
+  risk_flags: string[];
   rationale: string[];
 }
 
@@ -205,6 +210,12 @@ export interface ShortTermRisk {
 export interface BuySignalResult {
   rank: number;
   symbol: string;
+  prediction: 'UP' | 'DOWN' | 'SIDEWAYS';
+  probability: number;            // 0-1
+  confidence: number;             // 0-100
+  market_regime: 'TRENDING' | 'RANGING' | 'VOLATILE';
+  key_factors: string[];
+  risk_flags: string[];
   currentPrice: number;
   entryZoneLow: number;
   entryZoneHigh: number;

@@ -25,6 +25,87 @@ import { logSignal } from './tradeJournal';
 import { BUY_THRESHOLD, COMPOSITE_KEYS, SELL_THRESHOLD } from './scoring';
 import { roundTo8 } from './utils';
 
+type MarketStructure = 'higher_highs' | 'lower_lows' | 'range';
+
+function detectMarketStructure(candles: Candle[]): MarketStructure {
+  if (candles.length < 6) return 'range';
+  const recent = candles.slice(-6);
+  let higherHighs = 0;
+  let higherLows = 0;
+  let lowerHighs = 0;
+  let lowerLows = 0;
+
+  for (let i = 1; i < recent.length; i++) {
+    if (recent[i].high > recent[i - 1].high) higherHighs++;
+    if (recent[i].low > recent[i - 1].low) higherLows++;
+    if (recent[i].high < recent[i - 1].high) lowerHighs++;
+    if (recent[i].low < recent[i - 1].low) lowerLows++;
+  }
+
+  if (higherHighs >= 3 && higherLows >= 3) return 'higher_highs';
+  if (lowerHighs >= 3 && lowerLows >= 3) return 'lower_lows';
+  return 'range';
+}
+
+function evaluateDataQuality(candles: Candle[]): { quality: number; flags: string[] } {
+  const flags: string[] = [];
+  if (candles.length < 60) flags.push('Insufficient candle history');
+  if (candles.length < 3) return { quality: 30, flags };
+
+  const intervals: number[] = [];
+  for (let i = 1; i < candles.length; i++) intervals.push(candles[i].openTime - candles[i - 1].openTime);
+  const typicalInterval = intervals[Math.floor(intervals.length / 2)] ?? intervals[0] ?? 0;
+
+  let missingCandles = 0;
+  let anomalySpikes = 0;
+  for (let i = 1; i < candles.length; i++) {
+    const gap = candles[i].openTime - candles[i - 1].openTime;
+    if (typicalInterval > 0 && gap > typicalInterval * 1.5) missingCandles++;
+    const jump = Math.abs((candles[i].close - candles[i - 1].close) / Math.max(candles[i - 1].close, 1e-8));
+    if (jump > 0.15) anomalySpikes++;
+  }
+
+  if (missingCandles > 0) flags.push('Missing candle gaps detected');
+  if (anomalySpikes > 0) flags.push('Abnormal price spikes detected');
+
+  let quality = 100;
+  quality -= Math.min(40, missingCandles * 10);
+  quality -= Math.min(35, anomalySpikes * 7);
+  if (candles.length < 60) quality -= 15;
+
+  return { quality: Math.max(0, Math.round(quality)), flags };
+}
+
+function estimateHistoricalSimilarityProbability(candles: Candle[]): number {
+  const lookback = 10;
+  const horizon = 3;
+  if (candles.length < lookback + horizon + 15) return 0.5;
+
+  const closes = candles.map((c) => c.close);
+  const currentStart = closes.length - lookback - horizon;
+  const currentWindow = closes.slice(currentStart, currentStart + lookback);
+  const candidates: { distance: number; nextReturn: number }[] = [];
+
+  for (let i = lookback; i <= closes.length - lookback - horizon; i++) {
+    const pastWindow = closes.slice(i - lookback, i);
+    let distance = 0;
+    for (let j = 1; j < lookback; j++) {
+      const curRet = (currentWindow[j] - currentWindow[j - 1]) / Math.max(currentWindow[j - 1], 1e-8);
+      const pastRet = (pastWindow[j] - pastWindow[j - 1]) / Math.max(pastWindow[j - 1], 1e-8);
+      distance += Math.abs(curRet - pastRet);
+    }
+    const nextReturn = (closes[i + horizon] - closes[i]) / Math.max(closes[i], 1e-8);
+    candidates.push({ distance, nextReturn });
+  }
+
+  candidates.sort((a, b) => a.distance - b.distance);
+  const nearest = candidates.slice(0, 7);
+  if (nearest.length === 0) return 0.5;
+
+  const upCount = nearest.filter((s) => s.nextReturn > 0).length;
+  return upCount / nearest.length;
+}
+
 /** Run all indicators on a set of candles */
 export function runIndicators(candles: Candle[]): IndicatorResults {
   return {
@@ -60,9 +141,9 @@ export function determineSignal(score: number): Signal {
 export function buildTradeSignal(
   price: number,
   score: number,
-  indicators: IndicatorResults
+  indicators: IndicatorResults,
+  candles: Candle[]
 ): TradeSignal {
-  const signal = determineSignal(score);
   const rationale: string[] = [];
 
   if (indicators.rsi.signal === 'oversold') rationale.push('RSI oversold – potential reversal');
@@ -88,22 +169,65 @@ export function buildTradeSignal(
   // Entry zone: ±0.5% around current price
   const entryZoneLow = Math.round(price * 0.995 * 1e8) / 1e8;
   const entryZoneHigh = Math.round(price * 1.005 * 1e8) / 1e8;
+  const regime = detectRegime(candles, indicators);
+  const market_regime: TradeSignal['market_regime'] =
+    regime.regime === 'high_volatility' ? 'VOLATILE' : regime.regime === 'ranging' ? 'RANGING' : 'TRENDING';
+  const dataQuality = evaluateDataQuality(candles);
+  const marketStructure = detectMarketStructure(candles);
+  const historicalSimilarityUpProb = estimateHistoricalSimilarityProbability(candles);
+
+  const bullishSignals = [
+    indicators.rsi.signal !== 'overbought',
+    indicators.macd.crossover === 'bullish' || indicators.macd.histogram > 0,
+    indicators.ma.trend === 'bullish',
+    indicators.ichimoku?.signal === 'bullish',
+    indicators.stochRSI?.signal === 'oversold',
+  ].filter(Boolean).length;
+  const bearishSignals = [
+    indicators.rsi.signal === 'overbought',
+    indicators.macd.crossover === 'bearish' || indicators.macd.histogram < 0,
+    indicators.ma.trend === 'bearish',
+    indicators.ichimoku?.signal === 'bearish',
+    indicators.stochRSI?.signal === 'overbought',
+  ].filter(Boolean).length;
+  const structureUpProb =
+    marketStructure === 'higher_highs' ? 0.62 : marketStructure === 'lower_lows' ? 0.38 : 0.5;
+  const indicatorUpProb =
+    bullishSignals + bearishSignals > 0 ? bullishSignals / (bullishSignals + bearishSignals) : 0.5;
+  const ensembleUpProb = Math.min(
+    0.95,
+    Math.max(0.05, 0.45 * indicatorUpProb + 0.35 * historicalSimilarityUpProb + 0.2 * structureUpProb)
+  );
+  const agreement = Math.round(
+    ((Math.max(bullishSignals, bearishSignals) / Math.max(bullishSignals + bearishSignals, 1)) * 100)
+  );
+  const baseConfidence = Math.round(agreement * 0.45 + regime.confidence * 0.3 + dataQuality.quality * 0.25);
+
+  const prediction: TradeSignal['prediction'] =
+    baseConfidence < 60 ? 'SIDEWAYS' : ensembleUpProb >= 0.56 ? 'UP' : ensembleUpProb <= 0.44 ? 'DOWN' : 'SIDEWAYS';
+  const probabilityRaw = prediction === 'UP' ? ensembleUpProb : prediction === 'DOWN' ? 1 - ensembleUpProb : 0.5;
+  const probability = Math.round(probabilityRaw * 100) / 100;
+  const signal: Signal = prediction === 'UP' ? 'BUY' : prediction === 'DOWN' ? 'SELL' : 'HOLD';
+  const keyFactors = rationale.slice(0, 3);
+  const riskFlags: string[] = [...dataQuality.flags];
+  if (indicators.volume.volumeRatio < 0.8) riskFlags.push('Low liquidity');
+  if (Math.abs(indicators.macd.histogram) > 0.02) riskFlags.push('News-driven momentum risk');
+  if (indicators.rsi.signal === 'overbought') riskFlags.push('Overbought conditions');
+  if (indicators.rsi.signal === 'oversold') riskFlags.push('Oversold bounce risk');
+  if (market_regime === 'VOLATILE') riskFlags.push('High volatility');
+  if ((indicators.adx?.adx ?? 0) < 15) riskFlags.push('Weak trend structure');
+  if (baseConfidence < 60) riskFlags.push('Low confidence setup');
 
   return {
     type: signal,
     entryZoneLow,
     entryZoneHigh,
-    confidence: Math.max(
-      0,
-      Math.min(
-        100,
-        signal === 'BUY'
-          ? Math.round((BUY_THRESHOLD - score) + 60)
-          : signal === 'SELL'
-            ? Math.round((score - SELL_THRESHOLD) + 60)
-            : Math.round(100 - Math.min(Math.abs(score - BUY_THRESHOLD), Math.abs(score - SELL_THRESHOLD)) * 2)
-      )
-    ),
+    confidence: baseConfidence,
+    prediction,
+    probability,
+    market_regime,
+    key_factors: keyFactors,
+    risk_flags: riskFlags.slice(0, 4),
     rationale: rationale.slice(0, 5),
   };
 }
@@ -156,7 +280,13 @@ export function analyzeCoin(ticker: BinanceTicker, candles: Candle[]): CoinAnaly
   const score = calculateCompositeScore(indicators);
   const signal = determineSignal(score);
   const risk = orientRiskTargetsForSignal(calculateRiskTargets(price, candles), signal, indicators);
-  const tradeSignal = buildTradeSignal(price, score, indicators);
+  const tradeSignal = buildTradeSignal(price, score, indicators, candles);
+  const finalSignal: Signal =
+    tradeSignal.prediction === 'UP'
+      ? 'BUY'
+      : tradeSignal.prediction === 'DOWN'
+        ? 'SELL'
+        : 'HOLD';
 
   return {
     symbol: ticker.symbol,
@@ -167,7 +297,7 @@ export function analyzeCoin(ticker: BinanceTicker, candles: Candle[]): CoinAnaly
     high24h: parseFloat(ticker.highPrice),
     low24h: parseFloat(ticker.lowPrice),
     score,
-    signal,
+    signal: finalSignal,
     indicators,
     risk,
     tradeSignal,
