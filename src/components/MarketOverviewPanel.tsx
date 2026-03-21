@@ -54,7 +54,6 @@ export default function MarketOverviewPanel({ selectedExchanges }: MarketOvervie
   const [searching, setSearching] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [selectedCoin, setSelectedCoin] = useState<OverviewTradeRow | null>(null);
 
   const selectedExchangeParam = selectedExchanges.join(',');
   const selectedExchangeLabels = selectedExchanges.map((exchange) => EXCHANGE_LABELS[exchange]).join(', ');
@@ -177,20 +176,18 @@ export default function MarketOverviewPanel({ selectedExchanges }: MarketOvervie
         </div>
       )}
 
-      <div className="space-y-4">
+      <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
         <TrendTable
           title="Top 500 Uptrend Coins"
           rows={overview.uptrend}
           trendColor="text-green-400"
           positive
-          onSelectCoin={setSelectedCoin}
         />
         <TrendTable
           title="Top 500 Downtrend Coins"
           rows={overview.downtrend}
           trendColor="text-red-400"
           positive={false}
-          onSelectCoin={setSelectedCoin}
         />
       </div>
 
@@ -199,39 +196,6 @@ export default function MarketOverviewPanel({ selectedExchanges }: MarketOvervie
         Last updated:{' '}
         {new Date(overview.timestamp).toLocaleTimeString()}
       </p>
-
-      {selectedCoin && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 px-3" onClick={() => setSelectedCoin(null)}>
-          <div
-            className="w-full max-w-2xl rounded-xl border border-cyan-500/30 bg-gray-900 p-4"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="flex items-center justify-between mb-3">
-              <h3 className="text-base font-semibold text-cyan-300">{selectedCoin.symbol} — Full Signal Details</h3>
-              <button
-                type="button"
-                onClick={() => setSelectedCoin(null)}
-                className="text-xs px-2 py-1 rounded bg-gray-800 hover:bg-gray-700 text-gray-200"
-              >
-                Close
-              </button>
-            </div>
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
-              <Metric label="Exchange" value={EXCHANGE_LABELS[selectedCoin.exchange]} />
-              <Metric label="Price" value={formatPrice(selectedCoin.price)} />
-              <Metric label="24h Change" value={`${selectedCoin.priceChangePercent >= 0 ? '+' : ''}${selectedCoin.priceChangePercent.toFixed(2)}%`} />
-              <Metric label="Direction" value={selectedCoin.direction} />
-              <Metric label="Confidence" value={`${Math.round(selectedCoin.confidence)}%`} />
-              <Metric label="Entry" value={formatPrice(selectedCoin.entry)} />
-              <Metric label="Target" value={formatPrice(selectedCoin.target)} />
-              <Metric label="Stop Loss" value={formatPrice(selectedCoin.stopLoss)} />
-              <Metric label="Support" value={selectedCoin.support ? formatPrice(selectedCoin.support) : 'N/A'} />
-              <Metric label="Resistance" value={selectedCoin.resistance ? formatPrice(selectedCoin.resistance) : 'N/A'} />
-              <Metric label="Volume" value={formatVolume(selectedCoin.volume24h)} />
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 }
@@ -256,57 +220,60 @@ function TrendTable({
   rows,
   trendColor,
   positive,
-  onSelectCoin,
 }: {
   title: string;
   rows: OverviewTradeRow[];
   trendColor: string;
   positive: boolean;
-  onSelectCoin: (coin: OverviewTradeRow) => void;
 }) {
   return (
-    <section className="bg-gray-900 border border-gray-800 rounded-lg p-3">
+    <section className="bg-gray-900 border border-gray-800 rounded-lg p-3 overflow-x-auto">
       <h3 className={`text-sm font-semibold mb-2 ${trendColor}`}>{title}</h3>
-      <div className="space-y-2">
-        {rows.map((coin) => (
-          <button
-            key={`${coin.exchange}:${coin.symbol}`}
-            type="button"
-            onClick={() => onSelectCoin(coin)}
-            className="w-full text-left border border-gray-800 rounded-lg p-2 hover:border-cyan-500/40 hover:bg-gray-800/40 transition-colors"
-          >
-            <div className="flex items-center justify-between gap-2">
-              <span className="font-semibold text-gray-100">{coin.symbol}</span>
-              <span className={`text-xs font-semibold ${directionTextColor(coin.direction)}`}>{coin.direction}</span>
-            </div>
-            <div className="grid grid-cols-2 md:grid-cols-5 gap-2 mt-2 text-xs">
-              <div>
-                <p className="text-gray-500">Price</p>
-                <p className="text-gray-200">{formatPrice(coin.price)}</p>
-              </div>
-              <div>
-                <p className="text-gray-500">24h</p>
-                <p className={`font-medium ${positive ? 'text-green-400' : 'text-red-400'}`}>
-                  {coin.priceChangePercent >= 0 ? '+' : ''}
-                  {coin.priceChangePercent.toFixed(2)}%
-                </p>
-              </div>
-              <div>
-                <p className="text-gray-500">Entry</p>
-                <p className="text-gray-200">{formatPrice(coin.entry)}</p>
-              </div>
-              <div>
-                <p className="text-gray-500">Target</p>
-                <p className={coin.direction === 'SHORT' ? 'text-red-400' : 'text-green-400'}>{formatPrice(coin.target)}</p>
-              </div>
-              <div>
-                <p className="text-gray-500">Stop Loss</p>
-                <p className={coin.direction === 'SHORT' ? 'text-green-400' : 'text-red-400'}>{formatPrice(coin.stopLoss)}</p>
-              </div>
-            </div>
-          </button>
-        ))}
-      </div>
+      <table className="w-full min-w-[760px] text-sm">
+        <thead>
+          <tr className="text-xs text-gray-500 border-b border-gray-800">
+            <th className="text-left py-1.5">Coin</th>
+            <th className="text-right py-1.5">Price</th>
+            <th className="text-right py-1.5">24h</th>
+            <th className="text-right py-1.5">Direction</th>
+            <th className="text-right py-1.5">Entry</th>
+            <th className="text-right py-1.5">Target</th>
+            <th className="text-right py-1.5">Stop Loss</th>
+            <th className="text-right py-1.5">Support</th>
+            <th className="text-right py-1.5">Resistance</th>
+            <th className="text-right py-1.5">Vol</th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((coin) => (
+            <tr key={`${coin.exchange}:${coin.symbol}`} className="border-b border-gray-800/50">
+              <td className="py-1.5 text-gray-200">{coin.symbol}</td>
+              <td className="py-1.5 text-right text-gray-200">{formatPrice(coin.price)}</td>
+              <td className={`py-1.5 text-right font-medium ${positive ? 'text-green-400' : 'text-red-400'}`}>
+                {coin.priceChangePercent >= 0 ? '+' : ''}
+                {coin.priceChangePercent.toFixed(2)}%
+              </td>
+              <td className={`py-1.5 text-right font-semibold ${directionTextColor(coin.direction)}`}>
+                {coin.direction}
+              </td>
+              <td className="py-1.5 text-right text-gray-200">{formatPrice(coin.entry)}</td>
+              <td className={`py-1.5 text-right ${coin.direction === 'SHORT' ? 'text-red-400' : 'text-green-400'}`}>
+                {formatPrice(coin.target)}
+              </td>
+              <td className={`py-1.5 text-right ${coin.direction === 'SHORT' ? 'text-green-400' : 'text-red-400'}`}>
+                {formatPrice(coin.stopLoss)}
+              </td>
+              <td className="py-1.5 text-right text-gray-300">
+                {coin.support ? formatPrice(coin.support) : 'N/A'}
+              </td>
+              <td className="py-1.5 text-right text-gray-300">
+                {coin.resistance ? formatPrice(coin.resistance) : 'N/A'}
+              </td>
+              <td className="py-1.5 text-right text-gray-400">{formatVolume(coin.volume24h)}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
     </section>
   );
 }
