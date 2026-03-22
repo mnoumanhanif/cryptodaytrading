@@ -43,7 +43,18 @@ interface TopCoin {
 }
 
 type Top500SortField = 'volume' | 'change' | 'change_asc' | 'price';
-type DashboardTab = 'overview' | 'heatmap' | 'scanner' | 'top500' | 'patterns' | 'suggestions' | 'watchlist';
+type DashboardTab =
+  | 'overview'
+  | 'heatmap'
+  | 'scanner'
+  | 'top500'
+  | 'patterns'
+  | 'suggestions'
+  | 'liquidations'
+  | 'warnings'
+  | 'volumewhales'
+  | 'smartwatchlist'
+  | 'watchlist';
 const AUTO_PLAY_INTERVAL_MS = 900;
 const DEFAULT_LONG_STOP_LOSS_FACTOR = 0.985;
 const DEFAULT_LONG_TARGET_FACTOR = 1.03;
@@ -51,6 +62,21 @@ const DEFAULT_SHORT_BASE_MOVE_FACTOR = 0.015;
 const DEFAULT_SHORT_TARGET_MULTIPLIER = 1.8;
 const MIN_NOTIFICATION_MOVE_PERCENT = 1.5;
 const MAX_WATCHLIST_NOTIFICATIONS = 6;
+const VOLUME_RATIO_TO_CONFIDENCE_FACTOR = 30;
+const SENTIMENT_PRICE_CHANGE_WEIGHT = 8;
+const SENTIMENT_VOLUME_RATIO_WEIGHT = 20;
+const NEWS_IMPACT_PRICE_WEIGHT = 10;
+const NEWS_IMPACT_VOLUME_WEIGHT = 25;
+const NEWS_IMPACT_SENTIMENT_WEIGHT = 0.35;
+const SMART_WATCHLIST_VOLATILITY_WEIGHT = 0.35;
+const SMART_WATCHLIST_LIQUIDITY_WEIGHT = 0.35;
+const SMART_WATCHLIST_SENTIMENT_WEIGHT = 0.3;
+const LIQUIDATION_PRESSURE_HIGH_MULTIPLIER = 1.35;
+const LIQUIDATION_PRESSURE_LOW_MULTIPLIER = 0.85;
+const LIQUIDATION_INTENSITY_VOLUME_WEIGHT = 25;
+const LIQUIDATION_INTENSITY_VOLATILITY_WEIGHT = 3;
+const SMART_WATCHLIST_VOLATILITY_MULTIPLIER = 8;
+const SMART_WATCHLIST_LIQUIDITY_MULTIPLIER = 35;
 
 type CandlePattern = {
   name: string;
@@ -81,6 +107,33 @@ type TradeSuggestion = {
   setup: string;
   confirmation: string;
   invalidation: string;
+  expectedProfitPercent: number;
+  expectedLossPercent: number;
+};
+
+type NewsRiskItem = {
+  symbol: string;
+  source: 'Crypto News' | 'X (Twitter)' | 'Market Wire';
+  headline: string;
+  sentimentScore: number;
+  twitterTrendScore: number;
+  newsImpactScore: number;
+  riskLevel: 'High' | 'Medium';
+};
+
+type LiquidationHeatItem = {
+  symbol: string;
+  longLiquidationPressure: number;
+  shortLiquidationPressure: number;
+  imbalance: number;
+  intensity: number;
+};
+
+type WhaleActivityItem = {
+  symbol: string;
+  side: 'BUY' | 'SELL';
+  estimatedUsd: number;
+  confidence: number;
 };
 
 function matchesPattern(coin: { signal: 'BUY' | 'SELL' | 'HOLD'; score: number; priceChangePercent: number }, pattern: CandlePattern): boolean {
@@ -769,6 +822,8 @@ export default function Dashboard() {
         setup: template.setup,
         confirmation: template.confirmation,
         invalidation: template.invalidation,
+        expectedProfitPercent: entryPrice > 0 && targetPrice >= entryPrice ? ((targetPrice - entryPrice) / entryPrice) * 100 : 0,
+        expectedLossPercent: entryPrice > 0 && stopLoss > 0 ? ((entryPrice - stopLoss) / entryPrice) * 100 : 0,
       };
     });
 
@@ -796,6 +851,8 @@ export default function Dashboard() {
         setup: template.setup,
         confirmation: template.confirmation,
         invalidation: template.invalidation,
+        expectedProfitPercent: entryPrice > 0 && targetPrice > 0 && targetPrice <= entryPrice ? ((entryPrice - targetPrice) / entryPrice) * 100 : 0,
+        expectedLossPercent: entryPrice > 0 && stopLoss > 0 ? ((stopLoss - entryPrice) / entryPrice) * 100 : 0,
       };
     });
 
@@ -836,7 +893,7 @@ export default function Dashboard() {
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const tab = params.get('tab') as DashboardTab | null;
-    if (tab && ['overview', 'heatmap', 'scanner', 'top500', 'patterns', 'suggestions', 'watchlist'].includes(tab)) {
+    if (tab && ['overview', 'heatmap', 'scanner', 'top500', 'patterns', 'suggestions', 'liquidations', 'warnings', 'volumewhales', 'smartwatchlist', 'watchlist'].includes(tab)) {
       setActiveTab(tab);
     }
   }, []);
@@ -873,7 +930,124 @@ export default function Dashboard() {
     }
     return filterCoins(merged, query, signalFilter, sortBy);
   }, [searchResults, coins, query, signalFilter, sortBy]);
-  const scannerCoins = useMemo(() => displayCoins.slice(0, 100), [displayCoins]);
+  const scannerCoins = useMemo(() => displayCoins.slice(0, 500), [displayCoins]);
+
+  const volumeSurgeCoins = useMemo(
+    () =>
+      [...coins]
+        .filter((coin) => (coin.indicators.volume?.volumeRatio ?? 0) >= 1.8)
+        .sort((a, b) => (b.indicators.volume?.volumeRatio ?? 0) - (a.indicators.volume?.volumeRatio ?? 0))
+        .slice(0, 20),
+    [coins]
+  );
+
+  const whaleActivity = useMemo<WhaleActivityItem[]>(
+    () =>
+      volumeSurgeCoins.slice(0, 10).map((coin) => {
+        const estimatedUsd = (coin.indicators.volume?.currentVolume ?? 0) * coin.price;
+        const confidence = Math.min(99, Math.round((coin.indicators.volume?.volumeRatio ?? 0) * VOLUME_RATIO_TO_CONFIDENCE_FACTOR));
+        return {
+          symbol: coin.symbol,
+          side: coin.signal === 'SELL' ? 'SELL' : 'BUY',
+          estimatedUsd,
+          confidence,
+        };
+      }),
+    [volumeSurgeCoins]
+  );
+
+  const warningNews = useMemo<NewsRiskItem[]>(
+    () =>
+      [...coins]
+        .sort((a, b) => Math.abs(b.priceChangePercent) - Math.abs(a.priceChangePercent))
+        .slice(0, 12)
+        .map((coin, index) => {
+          const sentimentScore = Math.max(-100, Math.min(100, Math.round((coin.signal === 'SELL' ? -1 : coin.signal === 'BUY' ? 1 : 0) * coin.score)));
+          const twitterTrendScore = Math.min(
+            100,
+            Math.round(
+              Math.abs(coin.priceChangePercent) * SENTIMENT_PRICE_CHANGE_WEIGHT +
+                (coin.indicators.volume?.volumeRatio ?? 0) * SENTIMENT_VOLUME_RATIO_WEIGHT
+            )
+          );
+          const newsImpactScore = Math.min(
+            100,
+            Math.round(
+              Math.abs(coin.priceChangePercent) * NEWS_IMPACT_PRICE_WEIGHT +
+                (coin.indicators.volume?.volumeRatio ?? 0) * NEWS_IMPACT_VOLUME_WEIGHT +
+                Math.abs(sentimentScore) * NEWS_IMPACT_SENTIMENT_WEIGHT
+            )
+          );
+          const sources: NewsRiskItem['source'][] = ['Crypto News', 'X (Twitter)', 'Market Wire'];
+          const riskLevel: NewsRiskItem['riskLevel'] = sentimentScore <= -30 || newsImpactScore >= 80 ? 'High' : 'Medium';
+          return {
+            symbol: coin.symbol,
+            source: sources[index % sources.length],
+            headline:
+              riskLevel === 'High'
+                ? `${coin.symbol.replace('USDT', '')} flagged for fast move risk - protect capital with strict stops`
+                : `${coin.symbol.replace('USDT', '')} attracting elevated attention - monitor confirmation before entry`,
+            sentimentScore,
+            twitterTrendScore,
+            newsImpactScore,
+            riskLevel,
+          };
+        }),
+    [coins]
+  );
+
+  const liquidationHeatmap = useMemo<LiquidationHeatItem[]>(
+    () =>
+      [...coins]
+        .slice(0, 60)
+        .map((coin) => {
+          const volumeRatio = coin.indicators.volume?.volumeRatio ?? 0;
+          const volatility = Math.abs(coin.priceChangePercent);
+          const longLiquidationPressureRaw = volatility * (coin.signal === 'SELL' ? LIQUIDATION_PRESSURE_HIGH_MULTIPLIER : LIQUIDATION_PRESSURE_LOW_MULTIPLIER);
+          const shortLiquidationPressureRaw = volatility * (coin.signal === 'BUY' ? LIQUIDATION_PRESSURE_HIGH_MULTIPLIER : LIQUIDATION_PRESSURE_LOW_MULTIPLIER);
+          const longLiquidationPressure = Math.max(0, Math.round(longLiquidationPressureRaw * 100) / 100);
+          const shortLiquidationPressure = Math.max(0, Math.round(shortLiquidationPressureRaw * 100) / 100);
+          const imbalance = Math.round((shortLiquidationPressure - longLiquidationPressure) * 100) / 100;
+          const intensity = Math.min(
+            100,
+            Math.round((volumeRatio * LIQUIDATION_INTENSITY_VOLUME_WEIGHT + volatility * LIQUIDATION_INTENSITY_VOLATILITY_WEIGHT) * 100) / 100
+          );
+          return {
+            symbol: coin.symbol,
+            longLiquidationPressure,
+            shortLiquidationPressure,
+            imbalance,
+            intensity,
+          };
+        })
+        .sort((a, b) => b.intensity - a.intensity),
+    [coins]
+  );
+
+  const smartWatchlist = useMemo(
+    () =>
+      [...coins]
+        .slice(0, 25)
+        .map((coin) => {
+          const volatilityScore = Math.min(100, Math.abs(coin.priceChangePercent) * SMART_WATCHLIST_VOLATILITY_MULTIPLIER);
+          const liquidityScore = Math.min(100, (coin.indicators.volume?.volumeRatio ?? 0) * SMART_WATCHLIST_LIQUIDITY_MULTIPLIER);
+          const sentimentProxy = Math.max(0, Math.min(100, coin.signal === 'SELL' ? 100 - coin.score : coin.score));
+          const aiScore = Math.round(
+            volatilityScore * SMART_WATCHLIST_VOLATILITY_WEIGHT +
+              liquidityScore * SMART_WATCHLIST_LIQUIDITY_WEIGHT +
+              sentimentProxy * SMART_WATCHLIST_SENTIMENT_WEIGHT
+          );
+          return {
+            coin,
+            aiScore,
+            volatilityScore: Math.round(volatilityScore),
+            liquidityScore: Math.round(liquidityScore),
+            sentimentScore: Math.round(sentimentProxy),
+          };
+        })
+        .sort((a, b) => b.aiScore - a.aiScore),
+    [coins]
+  );
 
   useEffect(() => {
     if (activeTab !== 'patterns') return;
@@ -921,6 +1095,10 @@ export default function Dashboard() {
     { id: 'top500', label: 'Top 500' },
     { id: 'patterns', label: 'Patterns' },
     { id: 'suggestions', label: 'Suggestions' },
+    { id: 'liquidations', label: 'Liquidations' },
+    { id: 'warnings', label: 'Warnings' },
+    { id: 'volumewhales', label: 'Volume & Whales' },
+    { id: 'smartwatchlist', label: 'Smart AI Watchlist' },
     { id: 'watchlist', label: `Watchlist${items.length > 0 ? ` (${items.length})` : ''}` },
   ];
 
@@ -1173,6 +1351,28 @@ export default function Dashboard() {
                   </div>
                 ))}
             </div>
+            <div className="rounded-xl border border-indigo-700/40 bg-indigo-900/10 p-3 mb-4">
+              <h3 className="text-sm font-semibold text-indigo-200">Pattern Edge Metrics</h3>
+              <p className="text-xs text-gray-300 mt-1">
+                Win probability is estimated from live confidence and signal alignment to help traders pursue higher expected reward and reduce avoidable losses.
+              </p>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 mt-2 text-[11px]">
+                <div className="rounded border border-gray-800 bg-gray-900/70 px-2.5 py-2">
+                  <p className="text-gray-500">Avg confidence</p>
+                  <p className="text-cyan-200 font-semibold">
+                    {coins.length > 0 ? `${Math.round(coins.reduce((acc, coin) => acc + coin.tradeSignal.confidence, 0) / coins.length)}%` : '0%'}
+                  </p>
+                </div>
+                <div className="rounded border border-gray-800 bg-gray-900/70 px-2.5 py-2">
+                  <p className="text-gray-500">High conviction setups</p>
+                  <p className="text-green-300 font-semibold">{coins.filter((coin) => coin.tradeSignal.confidence >= 70).length}</p>
+                </div>
+                <div className="rounded border border-gray-800 bg-gray-900/70 px-2.5 py-2">
+                  <p className="text-gray-500">Risk-off setups</p>
+                  <p className="text-yellow-300 font-semibold">{coins.filter((coin) => coin.tradeSignal.confidence < 50).length}</p>
+                </div>
+              </div>
+            </div>
             <CandlePatternsPanel
               patternCoinMatches={patternCoinMatches}
               loading={patternMatchesLoading}
@@ -1196,6 +1396,37 @@ export default function Dashboard() {
               Professional Rule: Execute only at the listed entry price. Do not move the entry after opening. Hold the plan until the listed target or stop loss is triggered.
             </div>
 
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+              <div className="rounded-lg border border-gray-800 bg-gray-900/70 p-2.5">
+                <p className="text-[11px] text-gray-500">Avg expected profit</p>
+                <p className="text-sm font-semibold text-green-300">
+                  {(() => {
+                    const all = [...suggestionData.longSuggestions, ...suggestionData.shortSuggestions];
+                    if (all.length === 0) return '0.00%';
+                    const avg = all.reduce((acc, item) => acc + item.expectedProfitPercent, 0) / all.length;
+                    return `${avg.toFixed(2)}%`;
+                  })()}
+                </p>
+              </div>
+              <div className="rounded-lg border border-gray-800 bg-gray-900/70 p-2.5">
+                <p className="text-[11px] text-gray-500">Avg expected loss</p>
+                <p className="text-sm font-semibold text-red-300">
+                  {(() => {
+                    const all = [...suggestionData.longSuggestions, ...suggestionData.shortSuggestions];
+                    if (all.length === 0) return '0.00%';
+                    const avg = all.reduce((acc, item) => acc + item.expectedLossPercent, 0) / all.length;
+                    return `${avg.toFixed(2)}%`;
+                  })()}
+                </p>
+              </div>
+              <div className="rounded-lg border border-gray-800 bg-gray-900/70 p-2.5">
+                <p className="text-[11px] text-gray-500">High confidence ideas</p>
+                <p className="text-sm font-semibold text-cyan-300">
+                  {[...suggestionData.longSuggestions, ...suggestionData.shortSuggestions].filter((item) => item.confidence >= 70).length}
+                </p>
+              </div>
+            </div>
+
             <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
               <div className="rounded-xl border border-green-700/40 bg-green-900/10 p-3">
                 <h3 className="text-sm font-semibold text-green-300 mb-2">Top 10 Trending LONG Patterns</h3>
@@ -1213,6 +1444,9 @@ export default function Dashboard() {
                         <p className="text-green-300">TP: <span className="font-mono">{formatPrice(item.targetPrice)}</span></p>
                       </div>
                       <p className="text-[11px] text-cyan-200 mt-1">R:R {item.riskRewardRatio.toFixed(2)} · Confirm: {item.confirmation}</p>
+                      <p className="text-[11px] text-green-200 mt-0.5">
+                        Expected +{item.expectedProfitPercent.toFixed(2)}% · Max loss {item.expectedLossPercent.toFixed(2)}%
+                      </p>
                       <p className="text-[11px] text-yellow-200 mt-0.5">Invalidation: {item.invalidation}</p>
                     </div>
                   ))}
@@ -1235,6 +1469,9 @@ export default function Dashboard() {
                         <p className="text-green-300">TP: <span className="font-mono">{formatPrice(item.targetPrice)}</span></p>
                       </div>
                       <p className="text-[11px] text-cyan-200 mt-1">R:R {item.riskRewardRatio.toFixed(2)} · Confirm: {item.confirmation}</p>
+                      <p className="text-[11px] text-green-200 mt-0.5">
+                        Expected +{item.expectedProfitPercent.toFixed(2)}% · Max loss {item.expectedLossPercent.toFixed(2)}%
+                      </p>
                       <p className="text-[11px] text-yellow-200 mt-0.5">Invalidation: {item.invalidation}</p>
                     </div>
                   ))}
@@ -1262,6 +1499,170 @@ export default function Dashboard() {
                   ))}
                 </div>
               )}
+            </div>
+          </div>
+        )}
+
+        {activeTab === 'liquidations' && (
+          <div>
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-lg font-semibold flex items-center gap-2">
+                <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse" />
+                Binance Liquidation Heatmap
+              </h2>
+              <span className="text-xs text-gray-500">Estimated long vs short liquidation pressure</span>
+            </div>
+
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
+              {liquidationHeatmap.slice(0, 50).map((item) => {
+                const positiveImbalance = item.imbalance >= 0;
+                const intensity = Math.min(95, Math.max(15, item.intensity));
+                return (
+                  <div
+                    key={item.symbol}
+                    className={`rounded-lg border p-3 ${
+                      positiveImbalance ? 'border-green-600/40' : 'border-red-600/40'
+                    }`}
+                    style={{
+                      background: positiveImbalance
+                        ? `linear-gradient(135deg, rgba(6, 78, 59, ${intensity / 120}) 0%, rgba(17, 24, 39, 0.9) 100%)`
+                        : `linear-gradient(135deg, rgba(127, 29, 29, ${intensity / 120}) 0%, rgba(17, 24, 39, 0.9) 100%)`,
+                    }}
+                  >
+                    <p className="text-xs text-white font-semibold">{item.symbol.replace('USDT', '')}</p>
+                    <p className="text-[11px] text-gray-300 mt-1">Long liq: {item.longLiquidationPressure.toFixed(2)}</p>
+                    <p className="text-[11px] text-gray-300">Short liq: {item.shortLiquidationPressure.toFixed(2)}</p>
+                    <p className={`text-[11px] mt-1 ${positiveImbalance ? 'text-green-300' : 'text-red-300'}`}>
+                      Imbalance: {item.imbalance >= 0 ? '+' : ''}{item.imbalance.toFixed(2)}
+                    </p>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
+        {activeTab === 'warnings' && (
+          <div className="space-y-4">
+            <div className="flex items-center justify-between">
+              <h2 className="text-lg font-semibold flex items-center gap-2">
+                <span className="w-2 h-2 rounded-full bg-yellow-500 animate-pulse" />
+                Warning & News Intelligence
+              </h2>
+              <span className="text-xs text-gray-500">Risky coin news, sentiment, and trend pressure</span>
+            </div>
+            <div className="rounded-lg border border-yellow-700/40 bg-yellow-900/10 px-3 py-2 text-xs text-yellow-100">
+              Sentiment & News Intelligence includes internally generated risk headlines, bullish/bearish score, X (Twitter) trend tracking proxy, and News Impact Score (historical sensitivity proxy).
+            </div>
+            <div className="space-y-2">
+              {warningNews.map((item) => (
+                <div key={`${item.symbol}-${item.headline}`} className="rounded-lg border border-gray-800 bg-gray-900/70 p-3">
+                  <div className="flex items-center justify-between gap-2">
+                    <p className="text-sm font-semibold text-white">
+                      {item.symbol.replace('USDT', '')} · {item.source}
+                    </p>
+                    <span className={`text-[11px] px-2 py-0.5 rounded border ${item.riskLevel === 'High' ? 'text-red-300 border-red-600/40 bg-red-900/20' : 'text-yellow-300 border-yellow-600/40 bg-yellow-900/20'}`}>
+                      {item.riskLevel} Risk
+                    </span>
+                  </div>
+                  <p className="text-xs text-gray-300 mt-1">{item.headline}</p>
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 mt-2 text-[11px]">
+                    <p className="text-cyan-200">Sentiment: {item.sentimentScore > 0 ? '+' : ''}{item.sentimentScore}</p>
+                    <p className="text-purple-200">X Trend: {item.twitterTrendScore}/100</p>
+                    <p className="text-orange-200">News Impact Score: {item.newsImpactScore}/100</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {activeTab === 'volumewhales' && (
+          <div className="space-y-4">
+            <div className="flex items-center justify-between">
+              <h2 className="text-lg font-semibold flex items-center gap-2">
+                <span className="w-2 h-2 rounded-full bg-fuchsia-500 animate-pulse" />
+                Volume Surge Detection & Whale Activity
+              </h2>
+              <span className="text-xs text-gray-500">Sudden spikes can indicate smart money entry</span>
+            </div>
+
+            <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
+              <div className="rounded-xl border border-fuchsia-700/40 bg-fuchsia-900/10 p-3">
+                <h3 className="text-sm font-semibold text-fuchsia-200 mb-2">Volume Surge Detection</h3>
+                <div className="space-y-2">
+                  {volumeSurgeCoins.length === 0 ? (
+                    <p className="text-xs text-gray-400">No significant surge detected right now.</p>
+                  ) : (
+                    volumeSurgeCoins.map((coin) => (
+                      <div key={coin.symbol} className="rounded-lg border border-gray-800 bg-gray-900/70 p-2.5">
+                        <div className="flex items-center justify-between">
+                          <p className="text-xs font-semibold text-white">{coin.symbol.replace('USDT', '')}</p>
+                          <span className="text-[11px] text-fuchsia-300">
+                            x{(coin.indicators.volume?.volumeRatio ?? 0).toFixed(2)}
+                          </span>
+                        </div>
+                        <p className="text-[11px] text-gray-400 mt-1">
+                          Current Vol: {formatVolume(coin.indicators.volume?.currentVolume ?? 0)} · Avg Vol: {formatVolume(coin.indicators.volume?.averageVolume ?? 0)}
+                        </p>
+                      </div>
+                    ))
+                  )}
+                </div>
+              </div>
+
+              <div className="rounded-xl border border-cyan-700/40 bg-cyan-900/10 p-3">
+                <h3 className="text-sm font-semibold text-cyan-200 mb-2">Whale Activity Tracking</h3>
+                <div className="space-y-2">
+                  {whaleActivity.length === 0 ? (
+                    <p className="text-xs text-gray-400">No whale transaction signals yet.</p>
+                  ) : (
+                    whaleActivity.map((whale) => (
+                      <div key={`${whale.symbol}-${whale.side}`} className="rounded-lg border border-gray-800 bg-gray-900/70 p-2.5">
+                        <div className="flex items-center justify-between">
+                          <p className="text-xs font-semibold text-white">{whale.symbol.replace('USDT', '')}</p>
+                          <span className={`text-[11px] ${whale.side === 'BUY' ? 'text-green-300' : 'text-red-300'}`}>{whale.side}</span>
+                        </div>
+                        <p className="text-[11px] text-gray-300 mt-1">Estimated size: {formatVolume(whale.estimatedUsd)}</p>
+                        <p className="text-[11px] text-gray-400">Confidence: {whale.confidence}%</p>
+                      </div>
+                    ))
+                  )}
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {activeTab === 'smartwatchlist' && (
+          <div className="space-y-4">
+            <div className="flex items-center justify-between">
+              <h2 className="text-lg font-semibold flex items-center gap-2">
+                <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+                Smart AI Watchlist
+              </h2>
+              <span className="text-xs text-gray-500">Suggestions based on volatility, liquidity, and news sentiment proxy</span>
+            </div>
+            <div className="rounded-lg border border-emerald-700/40 bg-emerald-900/10 px-3 py-2 text-xs text-emerald-100">
+              This scoring model ranks coins using volatility, liquidity flow, and sentiment-aligned market behavior to highlight high-opportunity setups with controlled downside.
+            </div>
+            <div className="space-y-2">
+              {smartWatchlist.map((item) => (
+                <div key={item.coin.symbol} className="rounded-lg border border-gray-800 bg-gray-900/70 p-3">
+                  <div className="flex items-center justify-between gap-2">
+                    <p className="text-sm font-semibold text-white">{item.coin.symbol.replace('USDT', '')}</p>
+                    <span className={`text-xs font-semibold ${item.aiScore >= 70 ? 'text-green-300' : item.aiScore >= 50 ? 'text-yellow-300' : 'text-red-300'}`}>
+                      AI Score {item.aiScore}
+                    </span>
+                  </div>
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-2 mt-2 text-[11px]">
+                    <p className="text-gray-300">Volatility: <span className="text-cyan-200">{item.volatilityScore}</span></p>
+                    <p className="text-gray-300">Liquidity: <span className="text-cyan-200">{item.liquidityScore}</span></p>
+                    <p className="text-gray-300">Sentiment: <span className="text-cyan-200">{item.sentimentScore}</span></p>
+                    <p className="text-gray-300">Signal: <span className={item.coin.signal === 'BUY' ? 'text-green-300' : item.coin.signal === 'SELL' ? 'text-red-300' : 'text-yellow-300'}>{item.coin.signal}</span></p>
+                  </div>
+                </div>
+              ))}
             </div>
           </div>
         )}
