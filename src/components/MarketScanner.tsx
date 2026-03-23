@@ -13,6 +13,7 @@ interface MarketScannerProps {
   loading: boolean;
   onAddToWatchlist: (coin: CoinAnalysis) => void;
   isWatching: (symbol: string) => boolean;
+  summaryLabel?: string;
 }
 
 export default function MarketScanner({
@@ -20,6 +21,7 @@ export default function MarketScanner({
   loading,
   onAddToWatchlist,
   isWatching,
+  summaryLabel,
 }: MarketScannerProps) {
   if (loading) {
     return (
@@ -47,7 +49,7 @@ export default function MarketScanner({
     <div>
       {/* Results count */}
       <div className="text-xs text-gray-500 mb-3">
-        Showing {coins.length} coin{coins.length !== 1 ? 's' : ''}
+        {summaryLabel ?? `Showing ${coins.length} coin${coins.length !== 1 ? 's' : ''}`}
       </div>
 
       {/* Coin cards */}

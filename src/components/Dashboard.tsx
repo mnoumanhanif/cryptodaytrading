@@ -8,7 +8,7 @@
 import { useState, useMemo, useEffect, useCallback, useRef } from 'react';
 import { useMarketData } from '@/hooks/useMarketData';
 import { useWatchList } from '@/hooks/useWatchList';
-import { useCoinSearch, filterCoins, SignalFilter, SortField } from '@/hooks/useCoinSearch';
+import { filterCoins, SignalFilter, SortField } from '@/hooks/useCoinSearch';
 import { formatPrice, formatVolume } from '@/lib/utils';
 import MarketScanner from './MarketScanner';
 import WatchList from './WatchList';
@@ -106,6 +106,7 @@ const PATTERN_RSI_OVERBOUGHT_THRESHOLD = 65;
 const PATTERN_RSI_OVERSOLD_THRESHOLD = 40;
 const PATTERN_VOLUME_SPIKE_THRESHOLD = 1.6;
 const PATTERN_STRUCTURE_STRENGTH_THRESHOLD = 1.5;
+const SCANNER_PAGE_SIZE = 200;
 
 const UI_HEADING_CLASS = 'text-[20px] font-bold';
 const UI_SECTION_TITLE_CLASS = 'text-[17px] font-semibold';
@@ -585,12 +586,11 @@ function Top500Panel({
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [page, setPage] = useState(1);
-  const [totalPages, setTotalPages] = useState(20);
   const [total, setTotal] = useState(500);
   const [sort, setSort] = useState<Top500SortField>('volume');
   const [search, setSearch] = useState('');
 
-  const LIMIT = 25;
+  const LIMIT = 500;
 
   const fetchPage = useCallback(
     async (p: number, s: Top500SortField) => {
@@ -605,7 +605,6 @@ function Top500Panel({
         const data = await res.json();
         setCoins(data.coins ?? []);
         setPage(data.page ?? p);
-        setTotalPages(data.totalPages ?? 20);
         setTotal(data.total ?? 500);
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Failed to load');
@@ -621,16 +620,6 @@ function Top500Panel({
     setPage(1);
     fetchPage(1, sort);
   }, [sort, fetchPage]);
-
-  // Page change
-  const handlePageChange = (p: number) => {
-    fetchPage(p, sort);
-    // Update URL for bookmarking
-    const params = new URLSearchParams(window.location.search);
-    params.set('tab', 'top500');
-    params.set('page', String(p));
-    window.history.pushState({}, '', `?${params.toString()}`);
-  };
 
   // Client-side search filter
   const displayCoins = useMemo(() => {
@@ -665,10 +654,10 @@ function Top500Panel({
           </svg>
           <input
             type="text"
-            placeholder="Filter by symbol…"
+            placeholder="Search by symbol (e.g., BTC, ETH, SOL)"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            className="w-full bg-gray-800 border border-gray-600 rounded-lg pl-8 pr-3 py-1.5 text-sm text-white placeholder-gray-500 focus:outline-none focus:border-blue-500"
+            className="w-full bg-slate-900 border border-slate-700 rounded-xl pl-8 pr-3 py-2 text-sm text-white placeholder-gray-500 focus:outline-none focus:border-green-500 focus:shadow-[0_0_0_1px_#22c55e]"
           />
         </div>
 
@@ -691,7 +680,7 @@ function Top500Panel({
         </div>
 
         <span className="text-xs text-gray-500 ml-auto">
-          {total} coins total
+          Showing {displayCoins.length} of {total} coins
         </span>
       </div>
 
@@ -717,7 +706,7 @@ function Top500Panel({
           </thead>
           <tbody>
             {loading
-              ? Array.from({ length: LIMIT }).map((_, i) => (
+              ? Array.from({ length: 25 }).map((_, i) => (
                   <tr key={i} className="border-b border-gray-800/50">
                     {Array.from({ length: 7 }).map((__, j) => (
                       <td key={j} className="py-2.5 px-2">
@@ -779,12 +768,6 @@ function Top500Panel({
         </div>
       )}
 
-      {/* Pagination */}
-      <CoinPagination
-        currentPage={page}
-        totalPages={totalPages}
-        onPageChange={handlePageChange}
-      />
     </div>
   );
 }
@@ -1062,11 +1045,11 @@ export default function Dashboard() {
   const [selectedExchanges, setSelectedExchanges] = useState<SupportedExchange[]>(['binance']);
   const { coins, loading, error, lastUpdated, totalScanned, refetch } = useMarketData(selectedExchanges);
   const { items, addCoin, removeCoin, isWatching } = useWatchList();
-  const { searchResults, searching, searchError, searchCoins, searchExact } = useCoinSearch();
 
   const [query, setQuery] = useState('');
   const [signalFilter, setSignalFilter] = useState<SignalFilter>('ALL');
   const [sortBy, setSortBy] = useState<SortField>('score');
+  const [scannerPage, setScannerPage] = useState(1);
   const [activeTab, setActiveTab] = useState<DashboardTab>('overview');
   const [openPrimaryNav, setOpenPrimaryNav] = useState<PrimaryNavGroup['id'] | null>(null);
   const [quickSignalTimeframe, setQuickSignalTimeframe] = useState<QuickSignalTimeframe>('15m');
@@ -1258,31 +1241,25 @@ export default function Dashboard() {
     };
   }, []);
 
-  const handleSearch = (q: string) => {
-    searchCoins(q, selectedExchanges);
-  };
-
-  const handleSearchExact = (symbol: string) => {
-    searchExact(symbol, selectedExchanges);
-    setQuery('');
-  };
-
-  const handleClearSearch = () => {
-    searchCoins('');
-    setQuery('');
-  };
-
   const displayCoins = useMemo(() => {
-    const merged = [...coins];
-    const existingSymbols = new Set(coins.map((coin) => coin.symbol));
-    for (const coin of searchResults) {
-      if (!existingSymbols.has(coin.symbol)) {
-        merged.push(coin);
-      }
+    return filterCoins(coins, query, signalFilter, sortBy);
+  }, [coins, query, signalFilter, sortBy]);
+  const scannerTotalPages = useMemo(
+    () => Math.max(1, Math.ceil(displayCoins.length / SCANNER_PAGE_SIZE)),
+    [displayCoins.length]
+  );
+  const scannerCoins = useMemo(() => {
+    const start = (scannerPage - 1) * SCANNER_PAGE_SIZE;
+    return displayCoins.slice(start, start + SCANNER_PAGE_SIZE);
+  }, [displayCoins, scannerPage]);
+  useEffect(() => {
+    setScannerPage(1);
+  }, [query, signalFilter, sortBy, selectedExchanges, coins.length]);
+  useEffect(() => {
+    if (scannerPage > scannerTotalPages) {
+      setScannerPage(scannerTotalPages);
     }
-    return filterCoins(merged, query, signalFilter, sortBy);
-  }, [searchResults, coins, query, signalFilter, sortBy]);
-  const scannerCoins = useMemo(() => displayCoins.slice(0, 500), [displayCoins]);
+  }, [scannerPage, scannerTotalPages]);
 
   const volumeSurgeCoins = useMemo(
     () =>
@@ -2124,24 +2101,19 @@ export default function Dashboard() {
                 <h2 className="text-lg font-semibold flex items-center gap-2">
                   <span className="w-2 h-2 rounded-full bg-blue-500 animate-pulse" />
                   Market Scanner
-                  {searchResults.length > 0 && (
-                    <span className="text-xs text-purple-400 font-normal ml-1">
-                      — {searchResults.length} custom results
-                    </span>
-                  )}
                 </h2>
-                {searchResults.length > 0 && (
-                  <span className="text-xs text-purple-400 bg-purple-500/10 border border-purple-500/30 px-2 py-0.5 rounded">
-                    Custom Search
-                  </span>
-                )}
+                <span className="text-xs text-gray-500 bg-gray-900 border border-gray-800 px-2 py-0.5 rounded">
+                  Page {scannerPage} / {scannerTotalPages}
+                </span>
               </div>
               <p className="text-xs text-gray-500 -mt-1">{selectedExchangeLabels} live scanner feed</p>
 
               <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
                 <div className="bg-gray-900 border border-gray-800 rounded-lg p-2.5">
                   <p className="text-[11px] text-gray-500">Results</p>
-                  <p className="text-sm font-semibold text-white">{scannerCoins.length}</p>
+                  <p className="text-sm font-semibold text-white">
+                    Showing {scannerCoins.length} of {totalScanned || 1000}
+                  </p>
                 </div>
                 <div className="bg-gray-900 border border-gray-800 rounded-lg p-2.5">
                   <p className="text-[11px] text-gray-500">BUY</p>
@@ -2164,12 +2136,6 @@ export default function Dashboard() {
                 onSignalFilterChange={setSignalFilter}
                 sortBy={sortBy}
                 onSortChange={setSortBy}
-                onSearch={handleSearch}
-                onSearchExact={handleSearchExact}
-                searching={searching}
-                searchError={searchError}
-                hasSearchResults={searchResults.length > 0}
-                onClearSearch={handleClearSearch}
               />
 
               <MarketScanner
@@ -2177,7 +2143,35 @@ export default function Dashboard() {
                 loading={loading}
                 onAddToWatchlist={addCoin}
                 isWatching={isWatching}
+                summaryLabel={
+                  query.trim()
+                    ? `Showing ${displayCoins.length} of ${Math.max(totalScanned, coins.length || 1000)} coins (filtered)`
+                    : `Showing ${scannerCoins.length} of ${Math.max(totalScanned, coins.length || 1000)} coins`
+                }
               />
+              {!loading && scannerTotalPages > 1 && (
+                <div className="flex items-center justify-between gap-2 text-sm">
+                  <button
+                    type="button"
+                    onClick={() => setScannerPage((prev) => Math.max(1, prev - 1))}
+                    disabled={scannerPage === 1}
+                    className="px-3 py-1.5 rounded border border-gray-700 bg-gray-900 text-gray-300 hover:border-gray-500 disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    ◀ Prev
+                  </button>
+                  <span className="text-xs text-gray-400">
+                    Page {scannerPage} / {scannerTotalPages}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setScannerPage((prev) => Math.min(scannerTotalPages, prev + 1))}
+                    disabled={scannerPage === scannerTotalPages}
+                    className="px-3 py-1.5 rounded border border-gray-700 bg-gray-900 text-gray-300 hover:border-gray-500 disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    Next ▶
+                  </button>
+                </div>
+              )}
             </div>
 
             {/* Right: Watchlist sidebar */}
@@ -2202,7 +2196,7 @@ export default function Dashboard() {
                 <span className="w-2 h-2 rounded-full bg-purple-500 animate-pulse" />
                 Top 500 Coins
               </h2>
-              <span className="text-xs text-gray-500">{selectedExchangeLabels} · 25 coins per page</span>
+              <span className="text-xs text-gray-500">{selectedExchangeLabels} · 500 coins per page</span>
             </div>
             <Top500Panel selectedExchanges={selectedExchanges} isWatching={isWatching} />
           </div>
