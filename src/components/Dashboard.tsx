@@ -43,7 +43,18 @@ interface TopCoin {
 }
 
 type Top500SortField = 'volume' | 'change' | 'change_asc' | 'price';
-type DashboardTab = 'dashboard' | 'signals' | 'predictions' | 'marketdata' | 'journal';
+type DashboardTab =
+  | 'overview'
+  | 'heatmap'
+  | 'scanner'
+  | 'top500'
+  | 'patterns'
+  | 'suggestions'
+  | 'liquidations'
+  | 'warnings'
+  | 'volumewhales'
+  | 'smartwatchlist'
+  | 'watchlist';
 const AUTO_PLAY_INTERVAL_MS = 900;
 const DEFAULT_LONG_STOP_LOSS_FACTOR = 0.985;
 const DEFAULT_LONG_TARGET_FACTOR = 1.03;
@@ -66,30 +77,6 @@ const LIQUIDATION_INTENSITY_VOLUME_WEIGHT = 25;
 const LIQUIDATION_INTENSITY_VOLATILITY_WEIGHT = 3;
 const SMART_WATCHLIST_VOLATILITY_MULTIPLIER = 8;
 const SMART_WATCHLIST_LIQUIDITY_MULTIPLIER = 35;
-const SHORT_TERM_LONG_STOP_LOSS_FACTOR = 0.985;
-const SHORT_TERM_SHORT_STOP_LOSS_FACTOR = 1.015;
-const SHORT_TERM_LONG_TARGET_FACTOR = 1.02;
-const SHORT_TERM_SHORT_TARGET_FACTOR = 0.98;
-const TRADE_CONFIDENCE_SIGNAL_WEIGHT = 0.65;
-const TRADE_CONFIDENCE_INDICATOR_WEIGHT = 0.35;
-const MAX_TRADE_CONFIDENCE = 99;
-const MAX_SIGNAL_FLIP_ITEMS = 8;
-const MIN_VOLUME_BY_TIMEFRAME: Record<'5m' | '15m' | '1h' | '4h', number> = {
-  '5m': 1.05,
-  '15m': 1.15,
-  '1h': 1.3,
-  '4h': 1.5,
-};
-const CONFIDENCE_THRESHOLD_STRONG = 85;
-const CONFIDENCE_THRESHOLD_GOOD = 70;
-const CONFIDENCE_THRESHOLD_RISKY = 50;
-const MIN_CONFIDENCE_FILTER_THRESHOLD = 70;
-const HIGH_VOLUME_FILTER_THRESHOLD = 1.8;
-const INDICATOR_RSI_WEIGHT = 0.3;
-const INDICATOR_VOLUME_WEIGHT = 0.25;
-const INDICATOR_MA_WEIGHT = 0.25;
-const INDICATOR_MACD_WEIGHT = 0.2;
-const MAX_JOURNAL_DISPLAY_ITEMS = 100;
 
 type CandlePattern = {
   name: string;
@@ -147,25 +134,6 @@ type WhaleActivityItem = {
   side: 'BUY' | 'SELL';
   estimatedUsd: number;
   confidence: number;
-};
-
-
-type SignalStrength = 'STRONG' | 'MEDIUM' | 'WEAK';
-type SignalBand = 'AVOID' | 'RISKY' | 'GOOD' | 'STRONG';
-
-type SignalOpportunityRow = {
-  symbol: string;
-  price: number;
-  signalStrength: SignalStrength;
-  scoreBand: SignalBand;
-  entry: number;
-  stopLoss: number;
-  takeProfit: number;
-  confidence: number;
-  bias: 'LONG' | 'SHORT';
-  volumeRatio: number;
-  priceChangePercent: number;
-  indicatorScore: number;
 };
 
 function matchesPattern(coin: { signal: 'BUY' | 'SELL' | 'HOLD'; score: number; priceChangePercent: number }, pattern: CandlePattern): boolean {
@@ -804,83 +772,6 @@ function ExchangeSelector({
   );
 }
 
-
-
-function scoreBandTone(band: SignalBand): string {
-  if (band === 'STRONG') return 'text-green-300 border-green-700/40 bg-green-900/20';
-  if (band === 'GOOD') return 'text-cyan-300 border-cyan-700/40 bg-cyan-900/20';
-  if (band === 'RISKY') return 'text-yellow-300 border-yellow-700/40 bg-yellow-900/20';
-  return 'text-red-300 border-red-700/40 bg-red-900/20';
-}
-
-function strengthBadge(strength: SignalStrength): string {
-  if (strength === 'STRONG') return '🔥 Strong';
-  if (strength === 'MEDIUM') return '⚡ Medium';
-  return '⚠️ Weak';
-}
-
-function SignalPanel({
-  title,
-  rows,
-  accentClass,
-  onNotify,
-  notifiedSymbols,
-}: {
-  title: string;
-  rows: SignalOpportunityRow[];
-  accentClass: string;
-  onNotify: (symbol: string) => void;
-  notifiedSymbols: Set<string>;
-}) {
-  return (
-    <section className={`rounded-xl border p-3 ${accentClass} overflow-x-auto`}>
-      <h3 className="text-[16px] font-semibold mb-2">{title}</h3>
-      <table className="w-full min-w-[980px] text-[13px]">
-        <thead>
-          <tr className="text-[12px] text-gray-500 border-b border-gray-800">
-            <th className="text-left py-2 px-2">Coin</th>
-            <th className="text-right py-2 px-2">Price</th>
-            <th className="text-right py-2 px-2">Signal Strength</th>
-            <th className="text-right py-2 px-2">Entry</th>
-            <th className="text-right py-2 px-2">SL</th>
-            <th className="text-right py-2 px-2">TP</th>
-            <th className="text-right py-2 px-2">Confidence</th>
-            <th className="text-right py-2 px-2">Bias</th>
-            <th className="text-right py-2 px-2">Score</th>
-            <th className="text-right py-2 px-2">Alert</th>
-          </tr>
-        </thead>
-        <tbody>
-          {rows.slice(0, 50).map((row) => (
-            <tr key={`${title}-${row.symbol}`} className="border-b border-gray-800/40">
-              <td className="py-2 px-2 text-gray-100">{row.symbol.replace('USDT', '')}</td>
-              <td className="py-2 px-2 text-right text-gray-200">{formatPrice(row.price)}</td>
-              <td className="py-2 px-2 text-right text-gray-200">{strengthBadge(row.signalStrength)}</td>
-              <td className="py-2 px-2 text-right text-cyan-200">{formatPrice(row.entry)}</td>
-              <td className="py-2 px-2 text-right text-red-300">{formatPrice(row.stopLoss)}</td>
-              <td className="py-2 px-2 text-right text-green-300">{formatPrice(row.takeProfit)}</td>
-              <td className="py-2 px-2 text-right text-gray-200">{row.confidence}%</td>
-              <td className={`py-2 px-2 text-right font-semibold ${row.bias === 'LONG' ? 'text-green-400' : 'text-red-400'}`}>
-                {row.bias === 'LONG' ? '🟢 Long' : '🔴 Short'}
-              </td>
-              <td className="py-2 px-2 text-right">
-                <span className={`text-[11px] px-2 py-0.5 rounded border ${scoreBandTone(row.scoreBand)}`}>{row.scoreBand}</span>
-              </td>
-              <td className="py-2 px-2 text-right">
-                <button
-                  onClick={() => onNotify(row.symbol)}
-                  className={`text-[11px] px-2 py-1 rounded border ${notifiedSymbols.has(row.symbol) ? 'text-cyan-300 border-cyan-600/40 bg-cyan-900/20' : 'text-gray-300 border-gray-700 bg-gray-900/50 hover:border-gray-500'}`}
-                >
-                  {notifiedSymbols.has(row.symbol) ? '🔔 Notified' : 'Notify me'}
-                </button>
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </section>
-  );
-}
 // ── Dashboard ────────────────────────────────────────────────
 export default function Dashboard() {
   const [selectedExchanges, setSelectedExchanges] = useState<SupportedExchange[]>(['binance']);
@@ -891,7 +782,7 @@ export default function Dashboard() {
   const [query, setQuery] = useState('');
   const [signalFilter, setSignalFilter] = useState<SignalFilter>('ALL');
   const [sortBy, setSortBy] = useState<SortField>('score');
-  const [activeTab, setActiveTab] = useState<DashboardTab>('dashboard');
+  const [activeTab, setActiveTab] = useState<DashboardTab>('overview');
   const [patternCoinMatches, setPatternCoinMatches] = useState<PatternCoinMatches>(() => buildPatternCoinMatches(coins));
   const [patternMatchesLoading, setPatternMatchesLoading] = useState(false);
   const [patternMatchesError, setPatternMatchesError] = useState<string | null>(null);
@@ -1002,8 +893,8 @@ export default function Dashboard() {
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const tab = params.get('tab') as DashboardTab | null;
-    if (tab && ['dashboard', 'signals', 'predictions', 'marketdata', 'journal'].includes(tab)) {
-      setActiveTab(tab as DashboardTab);
+    if (tab && ['overview', 'heatmap', 'scanner', 'top500', 'patterns', 'suggestions', 'liquidations', 'warnings', 'volumewhales', 'smartwatchlist', 'watchlist'].includes(tab)) {
+      setActiveTab(tab);
     }
   }, []);
 
@@ -1011,7 +902,7 @@ export default function Dashboard() {
     setActiveTab(tab);
     const params = new URLSearchParams(window.location.search);
     params.set('tab', tab);
-    params.delete('page');
+    if (tab !== 'top500') params.delete('page');
     window.history.pushState({}, '', `?${params.toString()}`);
   };
 
@@ -1158,6 +1049,33 @@ export default function Dashboard() {
     [coins]
   );
 
+  useEffect(() => {
+    if (activeTab !== 'patterns') return;
+    let cancelled = false;
+    setPatternMatchesLoading(true);
+    setPatternMatchesError(null);
+    fetchBinancePatternMatches()
+      .then((matches) => {
+        if (!cancelled) {
+          setPatternCoinMatches(matches);
+        }
+      })
+      .catch((err) => {
+        if (!cancelled) {
+          setPatternMatchesError(err instanceof Error ? err.message : 'Failed to fetch Binance pattern matches');
+          setPatternCoinMatches(buildPatternCoinMatches(coins));
+        }
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setPatternMatchesLoading(false);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [activeTab, coins]);
 
   // Count signals in a single pass instead of three separate filter calls
   const { buyCount, sellCount, holdCount } = useMemo(() => {
@@ -1170,159 +1088,18 @@ export default function Dashboard() {
     return { buyCount: buy, sellCount: sell, holdCount: hold };
   }, [coins]);
 
-
-
-  const [signalTimeframe, setSignalTimeframe] = useState<'5m' | '15m' | '1h' | '4h'>('15m');
-  const [minConfidence70Only, setMinConfidence70Only] = useState(false);
-  const [highVolumeOnly, setHighVolumeOnly] = useState(false);
-  const [signalSortBy, setSignalSortBy] = useState<'confidence' | 'volume' | 'move'>('confidence');
-  const [notifiedSymbols, setNotifiedSymbols] = useState<Set<string>>(new Set());
-  const [lastSignalBiasBySymbol, setLastSignalBiasBySymbol] = useState<Record<string, 'LONG' | 'SHORT' | 'HOLD'>>({});
-
-  const scoreBandFromConfidence = (confidence: number): SignalBand => {
-    if (confidence >= CONFIDENCE_THRESHOLD_STRONG) return 'STRONG';
-    if (confidence >= CONFIDENCE_THRESHOLD_GOOD) return 'GOOD';
-    if (confidence >= CONFIDENCE_THRESHOLD_RISKY) return 'RISKY';
-    return 'AVOID';
-  };
-
-  const strengthFromConfidence = (confidence: number): SignalStrength => {
-    if (confidence >= CONFIDENCE_THRESHOLD_STRONG) return 'STRONG';
-    if (confidence >= CONFIDENCE_THRESHOLD_GOOD) return 'MEDIUM';
-    return 'WEAK';
-  };
-
-  const shortTermSignals = useMemo<SignalOpportunityRow[]>(() => {
-    return coins.map((coin) => {
-      const longBias = coin.tradeSignal.prediction === 'UP' || (coin.indicators.rsi.value < 30 && coin.indicators.ma.trend !== 'bearish');
-      const shortBias = coin.tradeSignal.prediction === 'DOWN' || (coin.indicators.rsi.value > 70 && coin.indicators.ma.trend !== 'bullish');
-      const bias: 'LONG' | 'SHORT' =
-        longBias && shortBias
-          ? coin.tradeSignal.prediction === 'DOWN' || coin.indicators.ma.trend === 'bearish'
-            ? 'SHORT'
-            : 'LONG'
-          : shortBias
-            ? 'SHORT'
-            : 'LONG';
-      const entry = coin.risk.entryPrice;
-      const stopLoss =
-        bias === 'LONG'
-          ? Math.min(coin.risk.stopLoss, entry * SHORT_TERM_LONG_STOP_LOSS_FACTOR)
-          : Math.max(coin.risk.stopLoss, entry * SHORT_TERM_SHORT_STOP_LOSS_FACTOR);
-      const takeProfit =
-        bias === 'LONG'
-          ? Math.max(coin.risk.targetPrice, entry * SHORT_TERM_LONG_TARGET_FACTOR)
-          : Math.min(coin.risk.targetPrice, entry * SHORT_TERM_SHORT_TARGET_FACTOR);
-      const indicatorScore = Math.round((
-        coin.indicators.rsi.score * INDICATOR_RSI_WEIGHT +
-        coin.indicators.volume.score * INDICATOR_VOLUME_WEIGHT +
-        coin.indicators.ma.score * INDICATOR_MA_WEIGHT +
-        coin.indicators.macd.score * INDICATOR_MACD_WEIGHT
-      ) * 100) / 100;
-      const confidence = Math.round(Math.max(0, Math.min(MAX_TRADE_CONFIDENCE, (coin.tradeSignal.confidence * TRADE_CONFIDENCE_SIGNAL_WEIGHT) + (indicatorScore * TRADE_CONFIDENCE_INDICATOR_WEIGHT))));
-
-      return {
-        symbol: coin.symbol,
-        price: coin.price,
-        signalStrength: strengthFromConfidence(confidence),
-        scoreBand: scoreBandFromConfidence(confidence),
-        entry,
-        stopLoss,
-        takeProfit,
-        confidence,
-        bias,
-        volumeRatio: coin.indicators.volume?.volumeRatio ?? 0,
-        priceChangePercent: coin.priceChangePercent,
-        indicatorScore,
-      };
-    });
-  }, [coins]);
-
-  const filteredSignals = useMemo(() => {
-    const minVol = MIN_VOLUME_BY_TIMEFRAME[signalTimeframe];
-    let rows = shortTermSignals.filter((row) => row.volumeRatio >= minVol);
-    if (minConfidence70Only) rows = rows.filter((row) => row.confidence >= MIN_CONFIDENCE_FILTER_THRESHOLD);
-    if (highVolumeOnly) rows = rows.filter((row) => row.volumeRatio >= HIGH_VOLUME_FILTER_THRESHOLD);
-
-    const sorted = [...rows].sort((a, b) => {
-      if (signalSortBy === 'volume') return b.volumeRatio - a.volumeRatio;
-      if (signalSortBy === 'move') return Math.abs(b.priceChangePercent) - Math.abs(a.priceChangePercent);
-      return b.confidence - a.confidence;
-    });
-    return sorted;
-  }, [shortTermSignals, signalTimeframe, minConfidence70Only, highVolumeOnly, signalSortBy]);
-
-  const longOpportunities = useMemo(() => filteredSignals.filter((r) => r.bias === 'LONG'), [filteredSignals]);
-  const shortOpportunities = useMemo(() => filteredSignals.filter((r) => r.bias === 'SHORT'), [filteredSignals]);
-
-  const signalFlips = useMemo(() => {
-    const flips: Array<{ symbol: string; from: 'LONG' | 'SHORT'; to: 'LONG' | 'SHORT' }> = [];
-    for (const row of filteredSignals) {
-      const prev = lastSignalBiasBySymbol[row.symbol];
-      if (prev && prev !== 'HOLD' && prev !== row.bias) {
-        flips.push({ symbol: row.symbol, from: prev as 'LONG' | 'SHORT', to: row.bias });
-      }
-    }
-    return flips.slice(0, MAX_SIGNAL_FLIP_ITEMS);
-  }, [filteredSignals, lastSignalBiasBySymbol]);
-
-  useEffect(() => {
-    setLastSignalBiasBySymbol((prev) => {
-      let changed = false;
-      const next = { ...prev };
-      for (const row of filteredSignals) {
-        if (next[row.symbol] !== row.bias) {
-          next[row.symbol] = row.bias;
-          changed = true;
-        }
-      }
-      return changed ? next : prev;
-    });
-  }, [filteredSignals]);
-
-  const topSignalInsights = useMemo(() => {
-    const top5 = filteredSignals.slice(0, 5);
-    const avgConfidence = top5.length ? Math.round(top5.reduce((acc, s) => acc + s.confidence, 0) / top5.length) : 0;
-    return {
-      top5,
-      avgConfidence,
-      strongCount: filteredSignals.filter((s) => s.signalStrength === 'STRONG').length,
-      goodCount: filteredSignals.filter((s) => s.scoreBand === 'GOOD' || s.scoreBand === 'STRONG').length,
-    };
-  }, [filteredSignals]);
-
-  const [journalData, setJournalData] = useState<{ entries: Array<{ id: string; symbol: string; signal: string; confidence: number; netRR: number; outcome: string; createdAt: number }>; stats?: { totalSignals: number; buySignals: number; sellSignals: number; winRate: number; pendingOutcomes: number } } | null>(null);
-  const [journalLoading, setJournalLoading] = useState(false);
-
-  const journalRows = useMemo(() => (journalData?.entries ?? []).slice(-MAX_JOURNAL_DISPLAY_ITEMS).reverse(), [journalData?.entries]);
-
-  useEffect(() => {
-    if (activeTab !== 'journal') return;
-    let cancelled = false;
-    const load = async () => {
-      setJournalLoading(true);
-      try {
-        const res = await fetch('/api/trade-journal', { cache: 'no-store' });
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        const data = await res.json();
-        if (!cancelled) setJournalData(data);
-      } catch {
-        if (!cancelled) setJournalData(null);
-      } finally {
-        if (!cancelled) setJournalLoading(false);
-      }
-    };
-    load();
-    return () => {
-      cancelled = true;
-    };
-  }, [activeTab]);
   const TABS: { id: DashboardTab; label: string }[] = [
-    { id: 'dashboard', label: '📊 Dashboard' },
-    { id: 'signals', label: '📈 Signals' },
-    { id: 'predictions', label: '🧠 AI Predictions' },
-    { id: 'marketdata', label: '📉 Market Data' },
-    { id: 'journal', label: '📒 Trade Journal' },
+    { id: 'overview', label: 'Overview' },
+    { id: 'heatmap', label: 'Heatmap' },
+    { id: 'scanner', label: 'Scanner' },
+    { id: 'top500', label: 'Top 500' },
+    { id: 'patterns', label: 'Patterns' },
+    { id: 'suggestions', label: 'Suggestions' },
+    { id: 'liquidations', label: 'Liquidations' },
+    { id: 'warnings', label: 'Warnings' },
+    { id: 'volumewhales', label: 'Volume & Whales' },
+    { id: 'smartwatchlist', label: 'Smart AI Watchlist' },
+    { id: 'watchlist', label: `Watchlist${items.length > 0 ? ` (${items.length})` : ''}` },
   ];
 
   return (
@@ -1331,10 +1108,10 @@ export default function Dashboard() {
       <header className="border-b border-gray-800 bg-gray-900/80 backdrop-blur-sm sticky top-0 z-10">
         <div className="max-w-7xl mx-auto px-4 py-3 flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <h1 className="text-[22px] font-bold bg-gradient-to-r from-blue-400 to-cyan-400 bg-clip-text text-transparent">
+            <h1 className="text-xl font-bold bg-gradient-to-r from-blue-400 to-cyan-400 bg-clip-text text-transparent">
               Crypto Trading Dashboard
             </h1>
-            <span className="text-[12px] text-gray-500 hidden sm:inline">
+            <span className="text-xs text-gray-500 hidden sm:inline">
               Technical Analysis Dashboard
             </span>
           </div>
@@ -1414,205 +1191,87 @@ export default function Dashboard() {
       </div>
 
       {/* Tab content */}
-      <div className="max-w-7xl mx-auto px-4 py-6 space-y-4">
+      <div className="max-w-7xl mx-auto px-4 py-6">
         <ExchangeSelector
           selectedExchanges={selectedExchanges}
           onSelectedExchangesChange={setSelectedExchanges}
         />
 
-        {activeTab === 'dashboard' && (
-          <div className="space-y-5">
-            <div className="flex items-center justify-between mb-1">
-              <h2 className="text-[18px] font-bold flex items-center gap-2">
+        {/* Market overview tab */}
+        {activeTab === 'overview' && (
+          <div>
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-lg font-semibold flex items-center gap-2">
                 <span className="w-2 h-2 rounded-full bg-cyan-500 animate-pulse" />
-                Dashboard
+                Market Overview
               </h2>
-              <span className="text-[12px] text-gray-400">Top 5 insights first</span>
+              <span className="text-xs text-gray-500">Multi-exchange snapshot</span>
             </div>
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
-              {topSignalInsights.top5.map((row) => (
-                <div key={row.symbol} className="rounded-lg border border-gray-800 bg-gray-900/70 p-3">
-                  <p className="text-[12px] text-gray-500">{row.symbol.replace('USDT', '')}</p>
-                  <p className="text-[16px] font-semibold text-white">{formatPrice(row.price)}</p>
-                  <p className={`text-[13px] font-medium ${row.bias === 'LONG' ? 'text-green-400' : 'text-red-400'}`}>
-                    {row.bias === 'LONG' ? '🟢 Long' : '🔴 Short'} · {row.confidence}%
-                  </p>
-                </div>
-              ))}
-            </div>
-
             <MarketOverviewPanel selectedExchanges={selectedExchanges} />
           </div>
         )}
 
-        {activeTab === 'signals' && (
-          <div className="space-y-5">
-            <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
-              <div>
-                <h2 className="text-[18px] font-bold flex items-center gap-2">🔥 Short-Term Trade Signals</h2>
-                <p className="text-[12px] text-gray-400 mt-1">Quick Trade Opportunities with confidence scoring and bias auto-classification.</p>
-              </div>
-              <div className="flex flex-wrap gap-2 text-[12px]">
-                <select
-                  value={signalTimeframe}
-                  onChange={(e) => setSignalTimeframe(e.target.value as '5m' | '15m' | '1h' | '4h')}
-                  className="bg-gray-900 border border-gray-700 rounded px-2 py-1.5"
-                >
-                  <option value="5m">5m</option>
-                  <option value="15m">15m</option>
-                  <option value="1h">1h</option>
-                  <option value="4h">4h</option>
-                </select>
-                <select
-                  value={signalSortBy}
-                  onChange={(e) => setSignalSortBy(e.target.value as 'confidence' | 'volume' | 'move')}
-                  className="bg-gray-900 border border-gray-700 rounded px-2 py-1.5"
-                >
-                  <option value="confidence">Highest confidence</option>
-                  <option value="volume">Highest volume</option>
-                  <option value="move">Biggest move</option>
-                </select>
-                <label className="inline-flex items-center gap-1.5 bg-gray-900 border border-gray-700 rounded px-2 py-1.5">
-                  <input type="checkbox" checked={minConfidence70Only} onChange={(e) => setMinConfidence70Only(e.target.checked)} /> 70+ only
-                </label>
-                <label className="inline-flex items-center gap-1.5 bg-gray-900 border border-gray-700 rounded px-2 py-1.5">
-                  <input type="checkbox" checked={highVolumeOnly} onChange={(e) => setHighVolumeOnly(e.target.checked)} /> High volume only
-                </label>
-              </div>
+        {/* Heatmap tab */}
+        {activeTab === 'heatmap' && (
+          <div>
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-lg font-semibold flex items-center gap-2">
+                <span className="w-2 h-2 rounded-full bg-orange-500 animate-pulse" />
+                Market Heatmap
+              </h2>
+              <span className="text-xs text-gray-500">{selectedExchangeLabels} · Auto-refreshes every 30s</span>
             </div>
+            <CoinHeatmap
+              coins={coins}
+              loading={loading}
+              onAddToWatchlist={addCoin}
+              isWatching={isWatching}
+            />
+          </div>
+        )}
 
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-              <div className="rounded-lg border border-gray-800 bg-gray-900/70 p-3">
-                <p className="text-[11px] text-gray-500">Avg confidence</p>
-                <p className="text-[18px] font-semibold text-cyan-300">{topSignalInsights.avgConfidence}%</p>
-              </div>
-              <div className="rounded-lg border border-gray-800 bg-gray-900/70 p-3">
-                <p className="text-[11px] text-gray-500">Strong trades</p>
-                <p className="text-[18px] font-semibold text-green-300">{topSignalInsights.strongCount}</p>
-              </div>
-              <div className="rounded-lg border border-gray-800 bg-gray-900/70 p-3">
-                <p className="text-[11px] text-gray-500">Good+ trades</p>
-                <p className="text-[18px] font-semibold text-yellow-300">{topSignalInsights.goodCount}</p>
-              </div>
-            </div>
-
-            {signalFlips.length > 0 && (
-              <div className="rounded-lg border border-indigo-700/40 bg-indigo-900/10 p-3">
-                <h3 className="text-[16px] font-semibold text-indigo-200 mb-2">Signal Change Detector</h3>
-                <div className="flex flex-wrap gap-2">
-                  {signalFlips.map((flip) => (
-                    <span key={`${flip.symbol}-${flip.from}-${flip.to}`} className="text-[12px] px-2 py-1 rounded border border-indigo-700/40 bg-gray-900/60">
-                      {flip.symbol.replace('USDT', '')}: {flip.from} → {flip.to}
+        {/* Scanner tab */}
+        {activeTab === 'scanner' && (
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            {/* Left: Scanner */}
+            <div className="lg:col-span-2 space-y-4">
+              <div className="flex items-center justify-between">
+                <h2 className="text-lg font-semibold flex items-center gap-2">
+                  <span className="w-2 h-2 rounded-full bg-blue-500 animate-pulse" />
+                  Market Scanner
+                  {searchResults.length > 0 && (
+                    <span className="text-xs text-purple-400 font-normal ml-1">
+                      — {searchResults.length} custom results
                     </span>
-                  ))}
+                  )}
+                </h2>
+                {searchResults.length > 0 && (
+                  <span className="text-xs text-purple-400 bg-purple-500/10 border border-purple-500/30 px-2 py-0.5 rounded">
+                    Custom Search
+                  </span>
+                )}
+              </div>
+              <p className="text-xs text-gray-500 -mt-1">{selectedExchangeLabels} live scanner feed</p>
+
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+                <div className="bg-gray-900 border border-gray-800 rounded-lg p-2.5">
+                  <p className="text-[11px] text-gray-500">Results</p>
+                  <p className="text-sm font-semibold text-white">{scannerCoins.length}</p>
+                </div>
+                <div className="bg-gray-900 border border-gray-800 rounded-lg p-2.5">
+                  <p className="text-[11px] text-gray-500">BUY</p>
+                  <p className="text-sm font-semibold text-green-400">{buyCount}</p>
+                </div>
+                <div className="bg-gray-900 border border-gray-800 rounded-lg p-2.5">
+                  <p className="text-[11px] text-gray-500">SELL</p>
+                  <p className="text-sm font-semibold text-red-400">{sellCount}</p>
+                </div>
+                <div className="bg-gray-900 border border-gray-800 rounded-lg p-2.5">
+                  <p className="text-[11px] text-gray-500">HOLD</p>
+                  <p className="text-sm font-semibold text-yellow-400">{holdCount}</p>
                 </div>
               </div>
-            )}
 
-            <SignalPanel
-              title="🟢 LONG Opportunities"
-              rows={longOpportunities}
-              accentClass="border-green-700/40 bg-green-900/10"
-              onNotify={(symbol) => setNotifiedSymbols((prev) => new Set(prev).add(symbol))}
-              notifiedSymbols={notifiedSymbols}
-            />
-            <SignalPanel
-              title="🔴 SHORT Opportunities"
-              rows={shortOpportunities}
-              accentClass="border-red-700/40 bg-red-900/10"
-              onNotify={(symbol) => setNotifiedSymbols((prev) => new Set(prev).add(symbol))}
-              notifiedSymbols={notifiedSymbols}
-            />
-          </div>
-        )}
-
-        {activeTab === 'predictions' && (
-          <div className="space-y-4">
-            <div className="flex items-center justify-between">
-              <h2 className="text-[18px] font-bold">🧠 AI Predictions</h2>
-              <span className="text-[12px] text-gray-400">Top 5 first, then details</span>
-            </div>
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
-              {filteredSignals.slice(0, 5).map((row) => (
-                <div key={`pred-${row.symbol}`} className="rounded-lg border border-gray-800 bg-gray-900/70 p-3">
-                  <p className="text-[12px] text-gray-500">{row.symbol.replace('USDT', '')}</p>
-                  <p className="text-[16px] font-semibold text-white">{row.confidence}%</p>
-                  <p className="text-[12px] text-cyan-300">Trade Score: {Math.round(row.indicatorScore)}</p>
-                  <p className={`text-[12px] ${row.scoreBand === 'STRONG' ? 'text-green-300' : row.scoreBand === 'GOOD' ? 'text-cyan-300' : row.scoreBand === 'RISKY' ? 'text-yellow-300' : 'text-red-300'}`}>
-                    {row.scoreBand}
-                  </p>
-                </div>
-              ))}
-            </div>
-
-            <div className="rounded-lg border border-gray-800 bg-gray-900/60 overflow-x-auto">
-              <table className="w-full min-w-[860px] text-[13px]">
-                <thead>
-                  <tr className="text-[12px] text-gray-500 border-b border-gray-800">
-                    <th className="text-left py-2 px-3">Coin</th>
-                    <th className="text-right py-2 px-3">Bias</th>
-                    <th className="text-right py-2 px-3">Confidence</th>
-                    <th className="text-right py-2 px-3">Score Band</th>
-                    <th className="text-right py-2 px-3">Vol Ratio</th>
-                    <th className="text-right py-2 px-3">Move</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {filteredSignals.slice(0, 50).map((row) => (
-                    <tr key={`ai-${row.symbol}`} className="border-b border-gray-800/50">
-                      <td className="py-2 px-3 text-gray-200">{row.symbol.replace('USDT', '')}</td>
-                      <td className={`py-2 px-3 text-right font-semibold ${row.bias === 'LONG' ? 'text-green-400' : 'text-red-400'}`}>{row.bias}</td>
-                      <td className="py-2 px-3 text-right text-gray-200">{row.confidence}%</td>
-                      <td className="py-2 px-3 text-right text-cyan-200">{row.scoreBand}</td>
-                      <td className="py-2 px-3 text-right text-gray-300">{row.volumeRatio.toFixed(2)}x</td>
-                      <td className={`py-2 px-3 text-right ${row.priceChangePercent >= 0 ? 'text-green-300' : 'text-red-300'}`}>
-                        {row.priceChangePercent >= 0 ? '+' : ''}{row.priceChangePercent.toFixed(2)}%
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        )}
-
-        {activeTab === 'marketdata' && (
-          <div className="space-y-5">
-            <div className="flex items-center justify-between">
-              <h2 className="text-[18px] font-bold">📉 Market Data</h2>
-              <span className="text-[12px] text-gray-400">Heatmap + scanner + top movers</span>
-            </div>
-            <div>
-              <h3 className="text-[16px] font-semibold mb-2">Top 5 Market Insights</h3>
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
-                {[...coins]
-                  .sort((a, b) => Math.abs(b.priceChangePercent) - Math.abs(a.priceChangePercent))
-                  .slice(0, 5)
-                  .map((coin) => (
-                    <div key={`mk-${coin.symbol}`} className="rounded-lg border border-gray-800 bg-gray-900/70 p-3">
-                      <p className="text-[12px] text-gray-500">{coin.symbol.replace('USDT', '')}</p>
-                      <p className="text-[14px] font-semibold text-white">{formatPrice(coin.price)}</p>
-                      <p className={`text-[12px] ${coin.priceChangePercent >= 0 ? 'text-green-300' : 'text-red-300'}`}>
-                        {coin.priceChangePercent >= 0 ? '+' : ''}{coin.priceChangePercent.toFixed(2)}%
-                      </p>
-                    </div>
-                  ))}
-              </div>
-            </div>
-
-            <div className="rounded-lg border border-gray-800 bg-gray-900/50 p-3">
-              <h3 className="text-[16px] font-semibold mb-2">Market Heatmap</h3>
-              <CoinHeatmap
-                coins={coins}
-                loading={loading}
-                onAddToWatchlist={addCoin}
-                isWatching={isWatching}
-              />
-            </div>
-
-            <div className="rounded-lg border border-gray-800 bg-gray-900/50 p-3">
-              <h3 className="text-[16px] font-semibold mb-2">Scanner</h3>
               <CoinFilter
                 query={query}
                 onQueryChange={setQuery}
@@ -1627,84 +1286,400 @@ export default function Dashboard() {
                 hasSearchResults={searchResults.length > 0}
                 onClearSearch={handleClearSearch}
               />
-              <div className="mt-3">
-                <MarketScanner
-                  coins={scannerCoins}
-                  loading={loading}
-                  onAddToWatchlist={addCoin}
-                  isWatching={isWatching}
-                />
+
+              <MarketScanner
+                coins={scannerCoins}
+                loading={loading}
+                onAddToWatchlist={addCoin}
+                isWatching={isWatching}
+              />
+            </div>
+
+            {/* Right: Watchlist sidebar */}
+            <div>
+              <h2 className="text-lg font-semibold mb-4 flex items-center gap-2">
+                <span className="w-2 h-2 rounded-full bg-green-500" />
+                Watchlist
+                {items.length > 0 && (
+                  <span className="text-xs text-gray-500 font-normal">({items.length})</span>
+                )}
+              </h2>
+              <WatchList items={items} coins={coins} onRemove={removeCoin} />
+            </div>
+          </div>
+        )}
+
+        {/* Top 500 tab */}
+        {activeTab === 'top500' && (
+          <div>
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-lg font-semibold flex items-center gap-2">
+                <span className="w-2 h-2 rounded-full bg-purple-500 animate-pulse" />
+                Top 500 Coins
+              </h2>
+              <span className="text-xs text-gray-500">{selectedExchangeLabels} · 25 coins per page</span>
+            </div>
+            <Top500Panel selectedExchanges={selectedExchanges} isWatching={isWatching} />
+          </div>
+        )}
+
+        {/* Candlestick patterns tab */}
+        {activeTab === 'patterns' && (
+          <div>
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-lg font-semibold flex items-center gap-2">
+                <span className="w-2 h-2 rounded-full bg-cyan-500 animate-pulse" />
+                Trader Learning Center
+              </h2>
+              <span className="text-xs text-gray-500">Binance context + pattern playbook</span>
+            </div>
+            <div className="grid grid-cols-2 md:grid-cols-5 gap-2 mb-4">
+              {[...coins]
+                .sort((a, b) => Math.abs(b.priceChangePercent) - Math.abs(a.priceChangePercent))
+                .slice(0, 5)
+                .map((coin) => (
+                  <div key={coin.symbol} className="bg-gray-900 border border-gray-800 rounded-lg p-2.5">
+                    <p className="text-[11px] text-gray-500">{coin.symbol.replace('USDT', '')}</p>
+                    <p
+                      className={`text-sm font-semibold ${
+                        coin.priceChangePercent >= 0 ? 'text-green-400' : 'text-red-400'
+                      }`}
+                    >
+                      {coin.priceChangePercent >= 0 ? '+' : ''}
+                      {coin.priceChangePercent.toFixed(2)}%
+                    </p>
+                  </div>
+                ))}
+            </div>
+            <div className="rounded-xl border border-indigo-700/40 bg-indigo-900/10 p-3 mb-4">
+              <h3 className="text-sm font-semibold text-indigo-200">Pattern Edge Metrics</h3>
+              <p className="text-xs text-gray-300 mt-1">
+                Win probability is estimated from live confidence and signal alignment to help traders pursue higher expected reward and reduce avoidable losses.
+              </p>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 mt-2 text-[11px]">
+                <div className="rounded border border-gray-800 bg-gray-900/70 px-2.5 py-2">
+                  <p className="text-gray-500">Avg confidence</p>
+                  <p className="text-cyan-200 font-semibold">
+                    {coins.length > 0 ? `${Math.round(coins.reduce((acc, coin) => acc + coin.tradeSignal.confidence, 0) / coins.length)}%` : '0%'}
+                  </p>
+                </div>
+                <div className="rounded border border-gray-800 bg-gray-900/70 px-2.5 py-2">
+                  <p className="text-gray-500">High conviction setups</p>
+                  <p className="text-green-300 font-semibold">{coins.filter((coin) => coin.tradeSignal.confidence >= 70).length}</p>
+                </div>
+                <div className="rounded border border-gray-800 bg-gray-900/70 px-2.5 py-2">
+                  <p className="text-gray-500">Risk-off setups</p>
+                  <p className="text-yellow-300 font-semibold">{coins.filter((coin) => coin.tradeSignal.confidence < 50).length}</p>
+                </div>
+              </div>
+            </div>
+            <CandlePatternsPanel
+              patternCoinMatches={patternCoinMatches}
+              loading={patternMatchesLoading}
+              error={patternMatchesError}
+            />
+          </div>
+        )}
+
+        {/* Suggestions tab */}
+        {activeTab === 'suggestions' && (
+          <div className="space-y-4">
+            <div className="flex items-center justify-between">
+              <h2 className="text-lg font-semibold flex items-center gap-2">
+                <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+                Professional Trade Suggestions
+              </h2>
+              <span className="text-xs text-gray-500">Entry price stays fixed until target or Stop Loss is hit</span>
+            </div>
+
+            <div className="rounded-lg border border-cyan-700/40 bg-cyan-900/10 px-3 py-2 text-xs text-cyan-100">
+              Professional Rule: Execute only at the listed entry price. Do not move the entry after opening. Hold the plan until the listed target or stop loss is triggered.
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+              <div className="rounded-lg border border-gray-800 bg-gray-900/70 p-2.5">
+                <p className="text-[11px] text-gray-500">Avg expected profit</p>
+                <p className="text-sm font-semibold text-green-300">
+                  {(() => {
+                    const all = [...suggestionData.longSuggestions, ...suggestionData.shortSuggestions];
+                    if (all.length === 0) return '0.00%';
+                    const avg = all.reduce((acc, item) => acc + item.expectedProfitPercent, 0) / all.length;
+                    return `${avg.toFixed(2)}%`;
+                  })()}
+                </p>
+              </div>
+              <div className="rounded-lg border border-gray-800 bg-gray-900/70 p-2.5">
+                <p className="text-[11px] text-gray-500">Avg expected loss</p>
+                <p className="text-sm font-semibold text-red-300">
+                  {(() => {
+                    const all = [...suggestionData.longSuggestions, ...suggestionData.shortSuggestions];
+                    if (all.length === 0) return '0.00%';
+                    const avg = all.reduce((acc, item) => acc + item.expectedLossPercent, 0) / all.length;
+                    return `${avg.toFixed(2)}%`;
+                  })()}
+                </p>
+              </div>
+              <div className="rounded-lg border border-gray-800 bg-gray-900/70 p-2.5">
+                <p className="text-[11px] text-gray-500">High confidence ideas</p>
+                <p className="text-sm font-semibold text-cyan-300">
+                  {[...suggestionData.longSuggestions, ...suggestionData.shortSuggestions].filter((item) => item.confidence >= 70).length}
+                </p>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
+              <div className="rounded-xl border border-green-700/40 bg-green-900/10 p-3">
+                <h3 className="text-sm font-semibold text-green-300 mb-2">Top 10 Trending LONG Patterns</h3>
+                <div className="space-y-2">
+                  {suggestionData.longSuggestions.map((item) => (
+                    <div key={`${item.bias}-${item.patternName}-${item.symbol}`} className="rounded-lg border border-gray-800 bg-gray-900/70 p-2.5">
+                      <div className="flex items-center justify-between gap-2">
+                        <p className="text-xs font-semibold text-white">{item.patternName} · {item.symbol.replace('USDT', '')}</p>
+                        <span className="text-[11px] text-green-300">Conf {Math.round(item.confidence)}%</span>
+                      </div>
+                      <p className="text-[11px] text-gray-400 mt-1">{item.setup}</p>
+                      <div className="grid grid-cols-3 gap-2 mt-2 text-[11px]">
+                        <p className="text-gray-200">Entry: <span className="font-mono">{formatPrice(item.entryPrice)}</span></p>
+                        <p className="text-red-300">SL: <span className="font-mono">{formatPrice(item.stopLoss)}</span></p>
+                        <p className="text-green-300">TP: <span className="font-mono">{formatPrice(item.targetPrice)}</span></p>
+                      </div>
+                      <p className="text-[11px] text-cyan-200 mt-1">R:R {item.riskRewardRatio.toFixed(2)} · Confirm: {item.confirmation}</p>
+                      <p className="text-[11px] text-green-200 mt-0.5">
+                        Expected +{item.expectedProfitPercent.toFixed(2)}% · Max loss {item.expectedLossPercent.toFixed(2)}%
+                      </p>
+                      <p className="text-[11px] text-yellow-200 mt-0.5">Invalidation: {item.invalidation}</p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              <div className="rounded-xl border border-rose-700/40 bg-rose-900/10 p-3">
+                <h3 className="text-sm font-semibold text-rose-300 mb-2">Top 10 Trending SHORT Patterns</h3>
+                <div className="space-y-2">
+                  {suggestionData.shortSuggestions.map((item) => (
+                    <div key={`${item.bias}-${item.patternName}-${item.symbol}`} className="rounded-lg border border-gray-800 bg-gray-900/70 p-2.5">
+                      <div className="flex items-center justify-between gap-2">
+                        <p className="text-xs font-semibold text-white">{item.patternName} · {item.symbol.replace('USDT', '')}</p>
+                        <span className="text-[11px] text-rose-300">Conf {Math.round(item.confidence)}%</span>
+                      </div>
+                      <p className="text-[11px] text-gray-400 mt-1">{item.setup}</p>
+                      <div className="grid grid-cols-3 gap-2 mt-2 text-[11px]">
+                        <p className="text-gray-200">Entry: <span className="font-mono">{formatPrice(item.entryPrice)}</span></p>
+                        <p className="text-red-300">SL: <span className="font-mono">{formatPrice(item.stopLoss)}</span></p>
+                        <p className="text-green-300">TP: <span className="font-mono">{formatPrice(item.targetPrice)}</span></p>
+                      </div>
+                      <p className="text-[11px] text-cyan-200 mt-1">R:R {item.riskRewardRatio.toFixed(2)} · Confirm: {item.confirmation}</p>
+                      <p className="text-[11px] text-green-200 mt-0.5">
+                        Expected +{item.expectedProfitPercent.toFixed(2)}% · Max loss {item.expectedLossPercent.toFixed(2)}%
+                      </p>
+                      <p className="text-[11px] text-yellow-200 mt-0.5">Invalidation: {item.invalidation}</p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            <div className="rounded-xl border border-indigo-700/40 bg-indigo-900/10 p-3">
+              <h3 className="text-sm font-semibold text-indigo-300 mb-2">Selected Coin Move Notifications</h3>
+              {watchlistMoveNotifications.length === 0 ? (
+                <p className="text-xs text-gray-400">No alert-level moves on your selected coins yet. Add coins to watchlist to activate professional notifications.</p>
+              ) : (
+                <div className="space-y-2">
+                  {watchlistMoveNotifications.map((alert) => (
+                    <div key={alert.symbol} className="rounded-lg border border-gray-800 bg-gray-900/70 p-2.5">
+                      <div className="flex items-center justify-between">
+                        <p className="text-xs font-semibold text-white">{alert.symbol.replace('USDT', '')}</p>
+                        <span className={`text-[11px] ${alert.status === 'TARGET HIT' ? 'text-green-300' : alert.status === 'STOP LOSS HIT' ? 'text-red-300' : 'text-cyan-300'}`}>
+                          {alert.status}
+                        </span>
+                      </div>
+                      <p className="text-[11px] text-gray-300 mt-1">Live: <span className="font-mono">{formatPrice(alert.livePrice)}</span> · Move: {alert.movePercent >= 0 ? '+' : ''}{alert.movePercent.toFixed(2)}%</p>
+                      <p className="text-[11px] text-gray-400 mt-0.5">{alert.guidance}</p>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
+        {activeTab === 'liquidations' && (
+          <div>
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-lg font-semibold flex items-center gap-2">
+                <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse" />
+                Binance Liquidation Heatmap
+              </h2>
+              <span className="text-xs text-gray-500">Estimated long vs short liquidation pressure</span>
+            </div>
+
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
+              {liquidationHeatmap.slice(0, 50).map((item) => {
+                const positiveImbalance = item.imbalance >= 0;
+                const intensity = Math.min(95, Math.max(15, item.intensity));
+                return (
+                  <div
+                    key={item.symbol}
+                    className={`rounded-lg border p-3 ${
+                      positiveImbalance ? 'border-green-600/40' : 'border-red-600/40'
+                    }`}
+                    style={{
+                      background: positiveImbalance
+                        ? `linear-gradient(135deg, rgba(6, 78, 59, ${intensity / 120}) 0%, rgba(17, 24, 39, 0.9) 100%)`
+                        : `linear-gradient(135deg, rgba(127, 29, 29, ${intensity / 120}) 0%, rgba(17, 24, 39, 0.9) 100%)`,
+                    }}
+                  >
+                    <p className="text-xs text-white font-semibold">{item.symbol.replace('USDT', '')}</p>
+                    <p className="text-[11px] text-gray-300 mt-1">Long liq: {item.longLiquidationPressure.toFixed(2)}</p>
+                    <p className="text-[11px] text-gray-300">Short liq: {item.shortLiquidationPressure.toFixed(2)}</p>
+                    <p className={`text-[11px] mt-1 ${positiveImbalance ? 'text-green-300' : 'text-red-300'}`}>
+                      Imbalance: {item.imbalance >= 0 ? '+' : ''}{item.imbalance.toFixed(2)}
+                    </p>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
+        {activeTab === 'warnings' && (
+          <div className="space-y-4">
+            <div className="flex items-center justify-between">
+              <h2 className="text-lg font-semibold flex items-center gap-2">
+                <span className="w-2 h-2 rounded-full bg-yellow-500 animate-pulse" />
+                Warning & News Intelligence
+              </h2>
+              <span className="text-xs text-gray-500">Risky coin news, sentiment, and trend pressure</span>
+            </div>
+            <div className="rounded-lg border border-yellow-700/40 bg-yellow-900/10 px-3 py-2 text-xs text-yellow-100">
+              Sentiment & News Intelligence includes internally generated risk headlines, bullish/bearish score, X (Twitter) trend tracking proxy, and News Impact Score (historical sensitivity proxy).
+            </div>
+            <div className="space-y-2">
+              {warningNews.map((item) => (
+                <div key={`${item.symbol}-${item.headline}`} className="rounded-lg border border-gray-800 bg-gray-900/70 p-3">
+                  <div className="flex items-center justify-between gap-2">
+                    <p className="text-sm font-semibold text-white">
+                      {item.symbol.replace('USDT', '')} · {item.source}
+                    </p>
+                    <span className={`text-[11px] px-2 py-0.5 rounded border ${item.riskLevel === 'High' ? 'text-red-300 border-red-600/40 bg-red-900/20' : 'text-yellow-300 border-yellow-600/40 bg-yellow-900/20'}`}>
+                      {item.riskLevel} Risk
+                    </span>
+                  </div>
+                  <p className="text-xs text-gray-300 mt-1">{item.headline}</p>
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 mt-2 text-[11px]">
+                    <p className="text-cyan-200">Sentiment: {item.sentimentScore > 0 ? '+' : ''}{item.sentimentScore}</p>
+                    <p className="text-purple-200">X Trend: {item.twitterTrendScore}/100</p>
+                    <p className="text-orange-200">News Impact Score: {item.newsImpactScore}/100</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {activeTab === 'volumewhales' && (
+          <div className="space-y-4">
+            <div className="flex items-center justify-between">
+              <h2 className="text-lg font-semibold flex items-center gap-2">
+                <span className="w-2 h-2 rounded-full bg-fuchsia-500 animate-pulse" />
+                Volume Surge Detection & Whale Activity
+              </h2>
+              <span className="text-xs text-gray-500">Sudden spikes can indicate smart money entry</span>
+            </div>
+
+            <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
+              <div className="rounded-xl border border-fuchsia-700/40 bg-fuchsia-900/10 p-3">
+                <h3 className="text-sm font-semibold text-fuchsia-200 mb-2">Volume Surge Detection</h3>
+                <div className="space-y-2">
+                  {volumeSurgeCoins.length === 0 ? (
+                    <p className="text-xs text-gray-400">No significant surge detected right now.</p>
+                  ) : (
+                    volumeSurgeCoins.map((coin) => (
+                      <div key={coin.symbol} className="rounded-lg border border-gray-800 bg-gray-900/70 p-2.5">
+                        <div className="flex items-center justify-between">
+                          <p className="text-xs font-semibold text-white">{coin.symbol.replace('USDT', '')}</p>
+                          <span className="text-[11px] text-fuchsia-300">
+                            x{(coin.indicators.volume?.volumeRatio ?? 0).toFixed(2)}
+                          </span>
+                        </div>
+                        <p className="text-[11px] text-gray-400 mt-1">
+                          Current Vol: {formatVolume(coin.indicators.volume?.currentVolume ?? 0)} · Avg Vol: {formatVolume(coin.indicators.volume?.averageVolume ?? 0)}
+                        </p>
+                      </div>
+                    ))
+                  )}
+                </div>
+              </div>
+
+              <div className="rounded-xl border border-cyan-700/40 bg-cyan-900/10 p-3">
+                <h3 className="text-sm font-semibold text-cyan-200 mb-2">Whale Activity Tracking</h3>
+                <div className="space-y-2">
+                  {whaleActivity.length === 0 ? (
+                    <p className="text-xs text-gray-400">No whale transaction signals yet.</p>
+                  ) : (
+                    whaleActivity.map((whale) => (
+                      <div key={`${whale.symbol}-${whale.side}`} className="rounded-lg border border-gray-800 bg-gray-900/70 p-2.5">
+                        <div className="flex items-center justify-between">
+                          <p className="text-xs font-semibold text-white">{whale.symbol.replace('USDT', '')}</p>
+                          <span className={`text-[11px] ${whale.side === 'BUY' ? 'text-green-300' : 'text-red-300'}`}>{whale.side}</span>
+                        </div>
+                        <p className="text-[11px] text-gray-300 mt-1">Estimated size: {formatVolume(whale.estimatedUsd)}</p>
+                        <p className="text-[11px] text-gray-400">Confidence: {whale.confidence}%</p>
+                      </div>
+                    ))
+                  )}
+                </div>
               </div>
             </div>
           </div>
         )}
 
-        {activeTab === 'journal' && (
+        {activeTab === 'smartwatchlist' && (
           <div className="space-y-4">
             <div className="flex items-center justify-between">
-              <h2 className="text-[18px] font-bold">📒 Trade Journal</h2>
-              <span className="text-[12px] text-gray-400">Auto-logged signals & performance stats</span>
+              <h2 className="text-lg font-semibold flex items-center gap-2">
+                <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+                Smart AI Watchlist
+              </h2>
+              <span className="text-xs text-gray-500">Suggestions based on volatility, liquidity, and news sentiment proxy</span>
             </div>
-
-            {journalLoading ? (
-              <div className="text-[14px] text-gray-400">Loading trade journal…</div>
-            ) : !journalData ? (
-              <div className="text-[14px] text-gray-400">No journal data available.</div>
-            ) : (
-              <>
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
-                  <div className="rounded-lg border border-gray-800 bg-gray-900/70 p-3">
-                    <p className="text-[11px] text-gray-500">Total Signals</p>
-                    <p className="text-[18px] font-semibold text-white">{journalData.stats?.totalSignals ?? 0}</p>
+            <div className="rounded-lg border border-emerald-700/40 bg-emerald-900/10 px-3 py-2 text-xs text-emerald-100">
+              This scoring model ranks coins using volatility, liquidity flow, and sentiment-aligned market behavior to highlight high-opportunity setups with controlled downside.
+            </div>
+            <div className="space-y-2">
+              {smartWatchlist.map((item) => (
+                <div key={item.coin.symbol} className="rounded-lg border border-gray-800 bg-gray-900/70 p-3">
+                  <div className="flex items-center justify-between gap-2">
+                    <p className="text-sm font-semibold text-white">{item.coin.symbol.replace('USDT', '')}</p>
+                    <span className={`text-xs font-semibold ${item.aiScore >= 70 ? 'text-green-300' : item.aiScore >= 50 ? 'text-yellow-300' : 'text-red-300'}`}>
+                      AI Score {item.aiScore}
+                    </span>
                   </div>
-                  <div className="rounded-lg border border-gray-800 bg-gray-900/70 p-3">
-                    <p className="text-[11px] text-gray-500">Buy Signals</p>
-                    <p className="text-[18px] font-semibold text-green-300">{journalData.stats?.buySignals ?? 0}</p>
-                  </div>
-                  <div className="rounded-lg border border-gray-800 bg-gray-900/70 p-3">
-                    <p className="text-[11px] text-gray-500">Sell Signals</p>
-                    <p className="text-[18px] font-semibold text-red-300">{journalData.stats?.sellSignals ?? 0}</p>
-                  </div>
-                  <div className="rounded-lg border border-gray-800 bg-gray-900/70 p-3">
-                    <p className="text-[11px] text-gray-500">Win Rate</p>
-                    <p className="text-[18px] font-semibold text-cyan-300">{Math.round(journalData.stats?.winRate ?? 0)}%</p>
-                  </div>
-                  <div className="rounded-lg border border-gray-800 bg-gray-900/70 p-3">
-                    <p className="text-[11px] text-gray-500">Pending</p>
-                    <p className="text-[18px] font-semibold text-yellow-300">{journalData.stats?.pendingOutcomes ?? 0}</p>
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-2 mt-2 text-[11px]">
+                    <p className="text-gray-300">Volatility: <span className="text-cyan-200">{item.volatilityScore}</span></p>
+                    <p className="text-gray-300">Liquidity: <span className="text-cyan-200">{item.liquidityScore}</span></p>
+                    <p className="text-gray-300">Sentiment: <span className="text-cyan-200">{item.sentimentScore}</span></p>
+                    <p className="text-gray-300">Signal: <span className={item.coin.signal === 'BUY' ? 'text-green-300' : item.coin.signal === 'SELL' ? 'text-red-300' : 'text-yellow-300'}>{item.coin.signal}</span></p>
                   </div>
                 </div>
+              ))}
+            </div>
+          </div>
+        )}
 
-                <div className="rounded-lg border border-gray-800 bg-gray-900/60 overflow-x-auto">
-                  <table className="w-full min-w-[860px] text-[13px]">
-                    <thead>
-                      <tr className="text-[12px] text-gray-500 border-b border-gray-800">
-                        <th className="text-left py-2 px-3">Coin</th>
-                        <th className="text-right py-2 px-3">Signal</th>
-                        <th className="text-right py-2 px-3">Confidence</th>
-                        <th className="text-right py-2 px-3">Net RR</th>
-                        <th className="text-right py-2 px-3">Outcome</th>
-                        <th className="text-right py-2 px-3">Created</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {journalRows.map((entry) => (
-                        <tr key={entry.id} className="border-b border-gray-800/50">
-                          <td className="py-2 px-3 text-gray-200">{entry.symbol.replace('USDT', '')}</td>
-                          <td className={`py-2 px-3 text-right font-semibold ${entry.signal === 'BUY' ? 'text-green-400' : entry.signal === 'SELL' ? 'text-red-400' : 'text-yellow-400'}`}>
-                            {entry.signal}
-                          </td>
-                          <td className="py-2 px-3 text-right text-gray-200">{Math.round(entry.confidence)}%</td>
-                          <td className="py-2 px-3 text-right text-cyan-200">{entry.netRR.toFixed(2)}</td>
-                          <td className="py-2 px-3 text-right text-gray-300">{entry.outcome}</td>
-                          <td className="py-2 px-3 text-right text-gray-400">{new Date(entry.createdAt).toLocaleTimeString()}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              </>
-            )}
+        {/* Watchlist tab */}
+        {activeTab === 'watchlist' && (
+          <div>
+            <h2 className="text-lg font-semibold mb-4 flex items-center gap-2">
+              <span className="w-2 h-2 rounded-full bg-green-500" />
+              Watchlist
+              {items.length > 0 && (
+                <span className="text-xs text-gray-500 font-normal">({items.length} coins)</span>
+              )}
+            </h2>
+            <div className="max-w-2xl">
+              <WatchList items={items} coins={coins} onRemove={removeCoin} />
+            </div>
           </div>
         )}
       </div>
