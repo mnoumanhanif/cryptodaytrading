@@ -19,7 +19,7 @@ async function fetchFromBinance(): Promise<ScannerResponse> {
   const { getTopUSDTPairs, fetchKlines } = await import('@/lib/binance');
   const { analyzeCoin } = await import('@/lib/analyzer');
 
-  const tickers = await getTopUSDTPairs(500);
+  const tickers = await getTopUSDTPairs(1000);
   const coins: CoinAnalysis[] = [];
 
   for (let i = 0; i < tickers.length; i += SCAN_BATCH_SIZE) {
@@ -54,7 +54,7 @@ export function useMarketData(selectedExchanges: SupportedExchange[] = ['binance
       const exchangesParam = selectedExchanges.join(',');
       const data: ScannerResponse = isStaticExport
         ? await fetchFromBinance()
-        : await fetch(`/api/scanner?exchanges=${encodeURIComponent(exchangesParam)}&limit=500`).then((res) => {
+        : await fetch(`/api/scanner?exchanges=${encodeURIComponent(exchangesParam)}&limit=1000`).then((res) => {
             if (!res.ok) throw new Error(`HTTP ${res.status}`);
             return res.json();
           });

@@ -1,6 +1,6 @@
 // ============================================================
 // Market Scanner API – scans top USDT pairs
-// GET /api/scanner?signal=BUY&sort=score&limit=100
+// GET /api/scanner?signal=BUY&sort=score&limit=1000
 // ============================================================
 
 import { NextResponse } from 'next/server';
@@ -19,7 +19,7 @@ type CacheEntry = {
 };
 const cacheByExchange = new Map<string, CacheEntry>();
 const CACHE_TTL = 30_000; // 30 seconds
-const DEFAULT_SCAN_COUNT = 100; // scan top 100 by default for richer scanner/heatmap data
+const DEFAULT_SCAN_COUNT = 1000; // scan top 1000 by default for richer scanner/heatmap data
 const BATCH_SIZE = 10;
 const DEADLINE_MS = 55_000; // stop processing before Vercel timeout
 const EXCHANGE_NAMES: Record<SupportedExchange, string> = {
@@ -52,8 +52,8 @@ export async function GET(request: Request) {
     const cacheKey = exchanges.join(',');
     const signalFilter = searchParams.get('signal')?.toUpperCase();
     const sortBy = searchParams.get('sort') ?? 'score';
-    const limitParam = parseInt(searchParams.get('limit') ?? '100', 10);
-    const limit = isNaN(limitParam) ? 100 : Math.min(Math.max(limitParam, 1), 500);
+    const limitParam = parseInt(searchParams.get('limit') ?? '1000', 10);
+    const limit = isNaN(limitParam) ? 1000 : Math.min(Math.max(limitParam, 1), 1000);
 
     const now = Date.now();
     const cached = cacheByExchange.get(cacheKey);
