@@ -100,60 +100,90 @@ export default function MarketOverviewPanel({ selectedExchanges }: MarketOvervie
       setError(null);
       const symbol = raw.endsWith('USDT') ? raw : `${raw}USDT`;
 
-      // First, check if the symbol exists in the already-loaded overview data
+      // Check local cached data first
+      const localExchangesFound = new Set<SupportedExchange>();
+      let localMatches: OverviewTradeRow[] = [];
       if (overview) {
         const allCoins = [...(overview.uptrend ?? []), ...(overview.downtrend ?? [])];
-        const localMatches = allCoins.filter(
-          (coin) => coin.symbol === symbol || coin.symbol.startsWith(raw)
-        );
-
-        if (localMatches.length > 0) {
-          // Exact matches first, then partial matches
-          const exactMatches = localMatches.filter((coin) => coin.symbol === symbol);
-          const matches = exactMatches.length > 0 ? exactMatches : localMatches;
-          const sortedCoins = [...matches].sort((a, b) => a.exchange.localeCompare(b.exchange));
-          const foundNames = sortedCoins.map((coin) => EXCHANGE_LABELS[coin.exchange]);
-          
-          setSearchResults(sortedCoins);
-          setSearchResult(sortedCoins[0]);
-          setSearchStatus(`${sortedCoins[0].symbol} found on ${foundNames.join(', ')} (from cached data).`);
-          setSearching(false);
-          return;
-        }
+        localMatches = allCoins.filter((coin) => coin.symbol === symbol);
+        localMatches.forEach((coin) => localExchangesFound.add(coin.exchange));
       }
 
-      // If not found locally, fall back to API search
+      // Determine which exchanges still need API lookup
+      const exchangesToSearch = selectedExchanges.filter((ex) => !localExchangesFound.has(ex));
+
+      // If we found results locally for all selected exchanges, no need for API call
+      if (exchangesToSearch.length === 0 && localMatches.length > 0) {
+        const sortedCoins = [...localMatches].sort((a, b) => a.exchange.localeCompare(b.exchange));
+        const foundNames = sortedCoins.map((coin) => EXCHANGE_LABELS[coin.exchange]);
+        setSearchResults(sortedCoins);
+        setSearchResult(sortedCoins[0]);
+        setSearchStatus(`${symbol} found on ${foundNames.join(', ')} (from cached data).`);
+        setSearching(false);
+        return;
+      }
+
+      // Search API for exchanges not found in local cache
       try {
-        const res = await fetch(
-          `/api/market-overview?exchanges=${encodeURIComponent(selectedExchangeParam)}&symbol=${encodeURIComponent(symbol)}`,
-          {
-            cache: 'no-store',
-          }
-        );
-        const data = (await res.json()) as CoinSearchResponse;
-        const coins = data.coins ?? (data.coin ? [data.coin] : []);
-        if (!res.ok || coins.length === 0) {
-          const searched = (data.searchedExchanges ?? selectedExchanges).map((exchange) => EXCHANGE_LABELS[exchange]).join(', ');
+        let apiCoins: OverviewTradeRow[] = [];
+        let apiMissingExchanges: SupportedExchange[] = [];
+
+        if (exchangesToSearch.length > 0) {
+          const res = await fetch(
+            `/api/market-overview?exchanges=${encodeURIComponent(exchangesToSearch.join(','))}&symbol=${encodeURIComponent(symbol)}`,
+            {
+              cache: 'no-store',
+            }
+          );
+          const data = (await res.json()) as CoinSearchResponse;
+          apiCoins = data.coins ?? (data.coin ? [data.coin] : []);
+          apiMissingExchanges = data.missingExchanges ?? [];
+        }
+
+        // Combine local + API results
+        const combinedCoins = [...localMatches, ...apiCoins];
+
+        if (combinedCoins.length === 0) {
+          const searched = selectedExchanges.map((exchange) => EXCHANGE_LABELS[exchange]).join(', ');
           setSearchResult(null);
           setSearchResults([]);
           setSearchStatus(`${symbol} not found in selected exchanges (${searched}).`);
           return;
         }
-        const sortedCoins = [...coins].sort((a, b) => a.exchange.localeCompare(b.exchange));
+
+        const sortedCoins = [...combinedCoins].sort((a, b) => a.exchange.localeCompare(b.exchange));
         const foundNames = sortedCoins.map((coin) => EXCHANGE_LABELS[coin.exchange]);
-        const missingNames = (data.missingExchanges ?? []).map((exchange) => EXCHANGE_LABELS[exchange]);
+        const allMissingExchanges = apiMissingExchanges.filter((ex) => !localExchangesFound.has(ex));
+        const missingNames = allMissingExchanges.map((exchange) => EXCHANGE_LABELS[exchange]);
+
         setSearchResults(sortedCoins);
         setSearchResult(sortedCoins[0]);
+
+        const sourceInfo = localMatches.length > 0 && apiCoins.length > 0
+          ? ' (combined: cached + live API)'
+          : localMatches.length > 0
+            ? ' (from cached data)'
+            : ' (from live API)';
+
         setSearchStatus(
           missingNames.length > 0
-            ? `${symbol} found on ${foundNames.join(', ')}. Not found on ${missingNames.join(', ')}.`
-            : `${symbol} found on ${foundNames.join(', ')}.`
+            ? `${symbol} found on ${foundNames.join(', ')}${sourceInfo}. Not found on ${missingNames.join(', ')}.`
+            : `${symbol} found on ${foundNames.join(', ')}${sourceInfo}.`
         );
       } catch (err) {
-        setSearchResult(null);
-        setSearchResults([]);
-        setSearchStatus(null);
-        setError(err instanceof Error ? err.message : 'Coin lookup failed');
+        // If API fails but we have local results, show those
+        if (localMatches.length > 0) {
+          const sortedCoins = [...localMatches].sort((a, b) => a.exchange.localeCompare(b.exchange));
+          const foundNames = sortedCoins.map((coin) => EXCHANGE_LABELS[coin.exchange]);
+          setSearchResults(sortedCoins);
+          setSearchResult(sortedCoins[0]);
+          setSearchStatus(`${symbol} found on ${foundNames.join(', ')} (from cached data). API search failed for other exchanges.`);
+        } else {
+          setSearchResult(null);
+          setSearchResults([]);
+          setSearchStatus(null);
+          setError(err instanceof Error ? err.message : 'Coin lookup failed');
+        }
       } finally {
         setSearching(false);
       }
@@ -224,7 +254,7 @@ export default function MarketOverviewPanel({ selectedExchanges }: MarketOvervie
         onSubmit={handleSearch}
         className="bg-gray-900 border border-gray-800 rounded-lg p-3 flex flex-col sm:flex-row gap-2 sm:items-center"
       >
-        <p className="text-xs text-gray-400 sm:w-60">Search coins (searches cached data first)</p>
+        <p className="text-xs text-gray-400 sm:w-60">Search any coin (cached + live API)</p>
         <input
           type="text"
           value={searchSymbol}
