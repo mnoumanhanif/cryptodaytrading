@@ -1139,21 +1139,15 @@ export default function Dashboard() {
     () => Array.from(new Set([...customMarketPairs.scannerSymbols, ...customMarketPairs.signalsSymbols])),
     [customMarketPairs.scannerSymbols, customMarketPairs.signalsSymbols]
   );
-
-  useEffect(() => {
-    if (isCoinGeckoKeySelected) {
-      return;
-    }
-
-    if (selectedExchanges.length === 0) {
+  const handleSelectedExchangesChange = useCallback((exchanges: SupportedExchange[]) => {
+    if (exchanges.length === 0) {
       setSelectedExchanges(['binance']);
       return;
     }
 
-    if (selectedExchanges.length > 1) {
-      setSelectedExchanges([selectedExchanges[0]]);
-    }
-  }, [isCoinGeckoKeySelected, selectedExchanges, setSelectedExchanges]);
+    setSelectedExchanges([exchanges[0]]);
+    setIsCoinGeckoKeySelected(false);
+  }, []);
 
   const handleAddMarketPair = useCallback(
     (coin: CoinAnalysis, targets: { scanner: boolean; watchlist: boolean; signals: boolean }) => {
@@ -2157,7 +2151,7 @@ export default function Dashboard() {
       <div className="max-w-7xl mx-auto px-4 py-6">
         <ExchangeSelector
           selectedExchanges={selectedExchanges}
-          onSelectedExchangesChange={setSelectedExchanges}
+          onSelectedExchangesChange={handleSelectedExchangesChange}
           isCoinGeckoKeySelected={isCoinGeckoKeySelected}
           onCoinGeckoKeySelectedChange={setIsCoinGeckoKeySelected}
         />
