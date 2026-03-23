@@ -49,7 +49,7 @@ type AnalyzedCoin = {
   coin: EnhancedCoinAnalysis;
 };
 
-const TREND_LIST_LIMIT = 100;
+const TREND_LIST_LIMIT = 500;
 const UNIVERSE_SIZE = 1000;
 const BATCH_SIZE = 10;
 const EXCHANGE_NAMES: Record<SupportedExchange, string> = {
