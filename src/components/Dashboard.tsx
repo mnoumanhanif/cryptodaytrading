@@ -24,10 +24,14 @@ import { usePortfolioNotifications } from '@/hooks/usePortfolioNotifications';
 import { SupportedExchange } from '@/lib/exchangeMarket';
 import { CoinAnalysis } from '@/lib/types';
 
-const EXCHANGE_OPTIONS: Array<{ id: SupportedExchange; label: string; envKey: string }> = [
+type ApiKeyOptionId = SupportedExchange | 'coingecko';
+const isExchangeOption = (value: ApiKeyOptionId): value is SupportedExchange => value !== 'coingecko';
+
+const API_KEY_OPTIONS: Array<{ id: ApiKeyOptionId; label: string; envKey: string }> = [
   { id: 'binance', label: 'Binance API Key', envKey: 'BINANCE_API_KEY' },
   { id: 'bybit', label: 'Bybit API Key', envKey: 'BYBIT_API_KEY' },
   { id: 'bitget', label: 'Bitget API Key', envKey: 'BITGET_API_KEY' },
+  { id: 'coingecko', label: 'CoinGecko API Key', envKey: 'COINGECKO_API_KEY' },
 ];
 
 const EXCHANGE_LABELS: Record<SupportedExchange, string> = {
@@ -1041,9 +1045,13 @@ function PatternLearningCard({ card, learningMode }: { card: PatternDecisionCard
 function ExchangeSelector({
   selectedExchanges,
   onSelectedExchangesChange,
+  isCoinGeckoKeySelected,
+  onCoinGeckoKeySelectedChange,
 }: {
   selectedExchanges: SupportedExchange[];
   onSelectedExchangesChange: (exchanges: SupportedExchange[]) => void;
+  isCoinGeckoKeySelected: boolean;
+  onCoinGeckoKeySelectedChange: (selected: boolean) => void;
 }) {
   const toggleExchange = (exchange: SupportedExchange) => {
     const nextSelection = selectedExchanges.includes(exchange)
@@ -1057,20 +1065,30 @@ function ExchangeSelector({
   return (
     <div className="bg-gray-900 border border-gray-800 rounded-lg p-3 mb-4">
       <p className="text-xs text-gray-400 mb-2">Select exchange API key(s) for all dashboard tabs</p>
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
-        {EXCHANGE_OPTIONS.map((option) => (
+      <div className="grid grid-cols-1 sm:grid-cols-4 gap-2">
+        {API_KEY_OPTIONS.map((option) => (
           <label
             key={option.id}
             className={`flex items-start gap-2 rounded border px-3 py-2 cursor-pointer transition-colors ${
-              selectedExchanges.includes(option.id)
-                ? 'border-cyan-500 bg-cyan-500/10'
-                : 'border-gray-700 bg-gray-800/40 hover:border-gray-600'
+              isExchangeOption(option.id)
+                ? selectedExchanges.includes(option.id)
+                  ? 'border-cyan-500 bg-cyan-500/10'
+                  : 'border-gray-700 bg-gray-800/40 hover:border-gray-600'
+                : isCoinGeckoKeySelected
+                  ? 'border-cyan-500 bg-cyan-500/10'
+                  : 'border-gray-700 bg-gray-800/40 hover:border-gray-600'
             }`}
           >
             <input
               type="checkbox"
-              checked={selectedExchanges.includes(option.id)}
-              onChange={() => toggleExchange(option.id)}
+              checked={isExchangeOption(option.id) ? selectedExchanges.includes(option.id) : isCoinGeckoKeySelected}
+              onChange={() => {
+                if (isExchangeOption(option.id)) {
+                  toggleExchange(option.id);
+                  return;
+                }
+                onCoinGeckoKeySelectedChange(!isCoinGeckoKeySelected);
+              }}
               className="mt-0.5 h-4 w-4 rounded border-gray-600 bg-gray-800 text-cyan-500 focus:ring-cyan-500"
             />
             <span className="text-sm text-white leading-tight">
@@ -1087,6 +1105,7 @@ function ExchangeSelector({
 // ── Dashboard ────────────────────────────────────────────────
 export default function Dashboard() {
   const [selectedExchanges, setSelectedExchanges] = useState<SupportedExchange[]>(['binance']);
+  const [isCoinGeckoKeySelected, setIsCoinGeckoKeySelected] = useState(false);
   const { coins, loading, error, lastUpdated, totalScanned, refetch } = useMarketData(selectedExchanges);
   const { items, addCoin, removeCoin, isWatching } = useWatchList();
   const customMarketPairs = useCustomMarketPairs();
@@ -2132,6 +2151,8 @@ export default function Dashboard() {
         <ExchangeSelector
           selectedExchanges={selectedExchanges}
           onSelectedExchangesChange={setSelectedExchanges}
+          isCoinGeckoKeySelected={isCoinGeckoKeySelected}
+          onCoinGeckoKeySelectedChange={setIsCoinGeckoKeySelected}
         />
 
         {/* Market overview tab */}
