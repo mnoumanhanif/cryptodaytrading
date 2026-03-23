@@ -85,6 +85,18 @@ const HIGH_LIQUIDATION_INTENSITY_THRESHOLD = 50;
 const ENTRY_REACHED_THRESHOLD_PERCENT = 0.3;
 const LIQUIDATION_CONFIDENCE_IMBALANCE_WEIGHT = 120;
 const LIQUIDATION_CONFIDENCE_INTENSITY_WEIGHT = 0.25;
+const MIN_PATTERN_WIN_PROBABILITY = 40;
+const MAX_PATTERN_WIN_PROBABILITY = 92;
+const PATTERN_BASE_WEIGHT = 0.65;
+const PATTERN_CONFIDENCE_WEIGHT = 0.35;
+const PATTERN_BULLISH_STOP_LOSS_FACTOR = 0.98;
+const PATTERN_BEARISH_STOP_LOSS_FACTOR = 1.02;
+const PATTERN_BULLISH_TAKE_PROFIT_FACTOR = 1.048;
+const PATTERN_BEARISH_TAKE_PROFIT_FACTOR = 0.952;
+const PATTERN_RSI_OVERBOUGHT_THRESHOLD = 65;
+const PATTERN_RSI_OVERSOLD_THRESHOLD = 40;
+const PATTERN_VOLUME_SPIKE_THRESHOLD = 1.6;
+const PATTERN_STRUCTURE_STRENGTH_THRESHOLD = 1.5;
 
 const UI_HEADING_CLASS = 'text-[20px] font-bold';
 const UI_SECTION_TITLE_CLASS = 'text-[17px] font-semibold';
@@ -848,7 +860,7 @@ function PatternLearningCard({ card, learningMode }: { card: PatternDecisionCard
       <div className="flex items-start justify-between gap-2">
         <div>
           <h4 className="text-sm font-semibold text-gray-100">{pattern.name}</h4>
-          <p className="text-[11px] text-gray-400 mt-0.5">Win Probability: {card.winProbability}% · {card.priority === 'High Opportunity' ? 'Strong' : card.priority}</p>
+          <p className="text-[11px] text-gray-400 mt-0.5">Win Probability: {card.winProbability}%</p>
         </div>
         <div className="flex flex-wrap items-center justify-end gap-1">
           <span className={`text-[10px] px-2 py-0.5 rounded-full border ${tone}`}>{pattern.bias}</span>
@@ -1373,16 +1385,16 @@ export default function Dashboard() {
       const priority: PatternPriority =
         leadConfidence >= 80 ? 'High Opportunity' : leadConfidence >= 65 ? 'Medium' : 'Low Quality';
       const baseWin = PATTERN_BASE_WIN_PROBABILITY[pattern.name] ?? 70;
-      const winProbability = Math.max(40, Math.min(92, Math.round((baseWin * 0.65 + leadConfidence * 0.35))));
+      const winProbability = Math.max(
+        MIN_PATTERN_WIN_PROBABILITY,
+        Math.min(
+          MAX_PATTERN_WIN_PROBABILITY,
+          Math.round(baseWin * PATTERN_BASE_WEIGHT + leadConfidence * PATTERN_CONFIDENCE_WEIGHT)
+        )
+      );
       const entry = leadCoin?.price ?? pattern.candles[pattern.candles.length - 1].close;
-      const stopLoss =
-        pattern.bias === 'Bearish'
-          ? entry * 1.02
-          : entry * 0.98;
-      const takeProfit =
-        pattern.bias === 'Bearish'
-          ? entry * 0.952
-          : entry * 1.048;
+      const stopLoss = pattern.bias === 'Bearish' ? entry * PATTERN_BEARISH_STOP_LOSS_FACTOR : entry * PATTERN_BULLISH_STOP_LOSS_FACTOR;
+      const takeProfit = pattern.bias === 'Bearish' ? entry * PATTERN_BEARISH_TAKE_PROFIT_FACTOR : entry * PATTERN_BULLISH_TAKE_PROFIT_FACTOR;
       const risk = Math.abs(entry - stopLoss);
       const reward = Math.abs(takeProfit - entry);
       const riskReward = risk > 0 ? reward / risk : 0;
@@ -1402,10 +1414,19 @@ export default function Dashboard() {
           : 'Key decision zone';
       const rsi = leadCoin?.indicators.rsi.value ?? 50;
       const confluence = [
-        { label: pattern.bias === 'Bearish' ? 'RSI Overbought' : 'RSI Oversold', pass: pattern.bias === 'Bearish' ? rsi >= 65 : rsi <= 40 },
-        { label: 'Volume Spike', pass: volumeRatio >= 1.6 },
-        { label: 'Structure Support', pass: Math.abs(leadCoin?.priceChangePercent ?? 0) >= 1.5 },
-        { label: 'Trend Alignment', pass: leadCoin?.indicators.ma.trend === (pattern.bias === 'Bearish' ? 'bearish' : 'bullish') },
+        {
+          label: pattern.bias === 'Bearish' ? 'RSI Overbought' : 'RSI Oversold',
+          pass: pattern.bias === 'Bearish' ? rsi >= PATTERN_RSI_OVERBOUGHT_THRESHOLD : rsi <= PATTERN_RSI_OVERSOLD_THRESHOLD,
+        },
+        { label: 'Volume Spike', pass: volumeRatio >= PATTERN_VOLUME_SPIKE_THRESHOLD },
+        { label: 'Structure Strength', pass: Math.abs(leadCoin?.priceChangePercent ?? 0) >= PATTERN_STRUCTURE_STRENGTH_THRESHOLD },
+        {
+          label: 'Trend Alignment',
+          pass:
+            pattern.bias === 'Reversal'
+              ? leadCoin?.indicators.ma.trend !== 'neutral'
+              : leadCoin?.indicators.ma.trend === (pattern.bias === 'Bearish' ? 'bearish' : 'bullish'),
+        },
       ];
       const isBullishBias = pattern.bias === 'Bullish' || pattern.bias === 'Reversal';
       const actionLine =
@@ -1460,25 +1481,36 @@ export default function Dashboard() {
   }, [patternBiasFilter, patternConfirmedOnly, patternDecisionCards, patternMinConfidence, patternTimeframeFilter]);
 
   const patternOverviewStats = useMemo(() => {
-    const bullish = patternDecisionCards.filter((card) => card.pattern.bias === 'Bullish').length;
-    const bearish = patternDecisionCards.filter((card) => card.pattern.bias === 'Bearish').length;
-    const best = [...patternDecisionCards].sort((a, b) => b.winProbability - a.winProbability)[0];
-    const weakest = [...patternDecisionCards].sort((a, b) => a.winProbability - b.winProbability)[0];
-    const avgRR = patternDecisionCards.length > 0
-      ? patternDecisionCards.reduce((acc, card) => acc + card.riskReward, 0) / patternDecisionCards.length
-      : 0;
-    const winRateLive = patternDecisionCards.length > 0
-      ? patternDecisionCards.reduce((acc, card) => acc + card.winProbability, 0) / patternDecisionCards.length
-      : 0;
-    const marketBias = bullish >= bearish ? 'Bullish' : 'Bearish';
+    const aggregate = patternDecisionCards.reduce(
+      (acc, card) => {
+        if (card.pattern.bias === 'Bullish') acc.bullish += 1;
+        if (card.pattern.bias === 'Bearish') acc.bearish += 1;
+        acc.totalRiskReward += card.riskReward;
+        acc.totalWinProbability += card.winProbability;
+        if (!acc.best || card.winProbability > acc.best.winProbability) acc.best = card;
+        if (!acc.weakest || card.winProbability < acc.weakest.winProbability) acc.weakest = card;
+        return acc;
+      },
+      {
+        bullish: 0,
+        bearish: 0,
+        totalRiskReward: 0,
+        totalWinProbability: 0,
+        best: undefined as PatternDecisionCard | undefined,
+        weakest: undefined as PatternDecisionCard | undefined,
+      }
+    );
+    const avgRR = patternDecisionCards.length > 0 ? aggregate.totalRiskReward / patternDecisionCards.length : 0;
+    const winRateLive = patternDecisionCards.length > 0 ? aggregate.totalWinProbability / patternDecisionCards.length : 0;
+    const marketBias = aggregate.bullish >= aggregate.bearish ? 'Bullish' : 'Bearish';
     const marketQuality = winRateLive >= 75 ? 'HIGH' : winRateLive >= 65 ? 'MEDIUM' : 'LOW';
 
     return {
-      bullish,
-      bearish,
+      bullish: aggregate.bullish,
+      bearish: aggregate.bearish,
       activePatterns: patternDecisionCards.length,
-      best,
-      weakest,
+      best: aggregate.best,
+      weakest: aggregate.weakest,
       avgRR,
       winRateLive,
       marketBias,
@@ -2011,7 +2043,7 @@ export default function Dashboard() {
             <div className="rounded-xl border border-violet-700/40 bg-violet-900/10 px-3 py-2 text-xs text-violet-100">
               <p className="font-semibold">🤖 AI Market Insight:</p>
               <p className="mt-1">
-                Market shows {patternOverviewStats.marketBias.toLowerCase()} reversal patterns with {patternOverviewStats.marketQuality.toLowerCase()} quality setup flow.
+                Market shows a {patternOverviewStats.marketBias.toLowerCase()} pattern mix with {patternOverviewStats.marketQuality.toLowerCase()} quality setup flow.
                 Best opportunities are in active names with stronger volume participation. Avoid low-conviction patterns with weak confluence.
               </p>
             </div>
