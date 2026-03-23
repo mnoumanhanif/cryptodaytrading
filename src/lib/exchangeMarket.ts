@@ -8,6 +8,11 @@ const FETCH_TIMEOUT_MS = 8_000;
 const HOUR_IN_MS = 60 * 60 * 1000;
 const BYBIT_KEY = process.env.BYBIT_API_KEY?.trim();
 const BITGET_KEY = process.env.BITGET_API_KEY?.trim();
+const COINGECKO_KEY = process.env.COINGECKO_API_KEY?.trim();
+const COINGECKO_KEY_HEADER =
+  process.env.COINGECKO_API_KEY_HEADER?.trim()?.toLowerCase() === 'pro'
+    ? 'x-cg-pro-api-key'
+    : 'x-cg-demo-api-key';
 
 function normalizePercent(value: number): number {
   if (!Number.isFinite(value)) return 0;
@@ -33,10 +38,14 @@ async function fetchJson<T>(url: string, headers?: Record<string, string>): Prom
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
   try {
+    const requestHeaders: Record<string, string> = { ...(headers ?? {}) };
+    if (url.startsWith('https://api.coingecko.com/api/v3') && COINGECKO_KEY) {
+      requestHeaders[COINGECKO_KEY_HEADER] = COINGECKO_KEY;
+    }
     const res = await fetch(url, {
       cache: 'no-store',
       signal: controller.signal,
-      headers,
+      headers: requestHeaders,
     });
     if (!res.ok) {
       throw new Error(`HTTP ${res.status} ${res.statusText}`);
