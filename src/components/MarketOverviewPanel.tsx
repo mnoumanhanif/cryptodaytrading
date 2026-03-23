@@ -45,6 +45,7 @@ const EXCHANGE_LABELS: Record<SupportedExchange, string> = {
   bybit: 'Bybit',
   bitget: 'Bitget',
 };
+const SEARCH_DEBOUNCE_MS = 300;
 
 interface MarketOverviewPanelProps {
   selectedExchanges: SupportedExchange[];
@@ -170,7 +171,7 @@ export default function MarketOverviewPanel({ selectedExchanges }: MarketOvervie
 
     const timeout = window.setTimeout(() => {
       runSearch(searchSymbol);
-    }, 300);
+    }, SEARCH_DEBOUNCE_MS);
 
     return () => window.clearTimeout(timeout);
   }, [searchSymbol, runSearch]);

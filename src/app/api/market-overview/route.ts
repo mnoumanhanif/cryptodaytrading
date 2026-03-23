@@ -60,6 +60,11 @@ type AnalyzedCoin = {
   coin: EnhancedCoinAnalysis;
 };
 
+type FulfilledTickerLookup = {
+  exchange: SupportedExchange;
+  ticker: Awaited<ReturnType<typeof getTickerBySymbolByExchange>>;
+};
+
 const TREND_LIST_LIMIT = 500;
 const UNIVERSE_SIZE = 1000;
 const BATCH_SIZE = 10;
@@ -130,9 +135,7 @@ export async function GET(request: Request) {
 
       const foundTickers = tickerResults
         .filter(
-          (
-            result
-          ): result is PromiseFulfilledResult<{ exchange: SupportedExchange; ticker: Awaited<ReturnType<typeof getTickerBySymbolByExchange>> }> =>
+          (result): result is PromiseFulfilledResult<FulfilledTickerLookup> =>
             result.status === 'fulfilled' && Boolean(result.value.ticker)
         )
         .map((result) => ({
