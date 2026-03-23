@@ -85,28 +85,6 @@ export default function MarketOverviewPanel({ selectedExchanges }: MarketOvervie
     }
   }, [selectedExchangeParam]);
 
-  useEffect(() => {
-    fetchOverview();
-    const id = window.setInterval(fetchOverview, 30_000);
-    return () => window.clearInterval(id);
-  }, [fetchOverview]);
-
-  if (loading) {
-    return <div className="text-sm text-gray-400">Loading market overview…</div>;
-  }
-
-  if (error) {
-    return (
-      <div className="bg-red-500/10 border border-red-500/30 rounded-lg px-4 py-3 text-red-400 text-sm">
-        ⚠ {error}
-      </div>
-    );
-  }
-
-  if (!overview) {
-    return <div className="text-sm text-gray-400">No market overview data available.</div>;
-  }
-
   const runSearch = useCallback(
     async (rawInput: string) => {
       const raw = rawInput.trim().toUpperCase();
@@ -160,6 +138,12 @@ export default function MarketOverviewPanel({ selectedExchanges }: MarketOvervie
   );
 
   useEffect(() => {
+    fetchOverview();
+    const id = window.setInterval(fetchOverview, 30_000);
+    return () => window.clearInterval(id);
+  }, [fetchOverview]);
+
+  useEffect(() => {
     const trimmed = searchSymbol.trim();
     if (!trimmed) {
       setSearching(false);
@@ -180,6 +164,22 @@ export default function MarketOverviewPanel({ selectedExchanges }: MarketOvervie
     event.preventDefault();
     void runSearch(searchSymbol);
   };
+
+  if (loading) {
+    return <div className="text-sm text-gray-400">Loading market overview…</div>;
+  }
+
+  if (error) {
+    return (
+      <div className="bg-red-500/10 border border-red-500/30 rounded-lg px-4 py-3 text-red-400 text-sm">
+        ⚠ {error}
+      </div>
+    );
+  }
+
+  if (!overview) {
+    return <div className="text-sm text-gray-400">No market overview data available.</div>;
+  }
 
   return (
     <div className="space-y-4">
