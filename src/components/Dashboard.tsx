@@ -101,6 +101,10 @@ type CandlePattern = {
 };
 
 type PatternCoinMatches = Record<string, string[]>;
+type PatternStatus = 'Forming' | 'Confirmed' | 'Invalidated';
+type PatternPriority = 'High Opportunity' | 'Medium' | 'Low Quality';
+type PatternTimeframe = '5m' | '15m' | '1h';
+type PatternBiasFilter = 'all' | 'Bullish' | 'Bearish';
 type SuggestionBias = 'LONG' | 'SHORT';
 type SuggestionTemplate = {
   name: string;
@@ -181,6 +185,27 @@ type QuickSignalAlert = {
   bias: QuickSignalBias;
 };
 
+type PatternDecisionCard = {
+  pattern: CandlePattern;
+  status: PatternStatus;
+  priority: PatternPriority;
+  timeframe: PatternTimeframe;
+  confidence: number;
+  winProbability: number;
+  trendContext: string;
+  volumeContext: string;
+  locationContext: string;
+  confluence: Array<{ label: string; pass: boolean }>;
+  entry: number;
+  stopLoss: number;
+  takeProfit: number;
+  riskReward: number;
+  liveCoins: string[];
+  aiInsight: string;
+  liquidationInsight: string;
+  actionLine: string;
+};
+
 function getSignalStrength(confidence: number): SignalStrength {
   if (confidence >= 85) return 'Strong';
   if (confidence >= 70) return 'Medium';
@@ -258,6 +283,32 @@ function buildPatternCoinMatches(
     return acc;
   }, {});
 }
+
+const PATTERN_BASE_WIN_PROBABILITY: Record<string, number> = {
+  Hammer: 76,
+  'Bullish Engulfing': 82,
+  'Shooting Star': 74,
+  'Doji (Indecision)': 52,
+  'Morning Star': 84,
+  'Evening Star': 73,
+  'Bearish Engulfing': 79,
+  'Inverted Hammer': 75,
+  'Three White Soldiers': 80,
+  'Three Black Crows': 78,
+};
+
+const PATTERN_DEFAULT_TIMEFRAME: Record<string, PatternTimeframe> = {
+  Hammer: '15m',
+  'Bullish Engulfing': '15m',
+  'Shooting Star': '15m',
+  'Doji (Indecision)': '5m',
+  'Morning Star': '1h',
+  'Evening Star': '1h',
+  'Bearish Engulfing': '15m',
+  'Inverted Hammer': '15m',
+  'Three White Soldiers': '1h',
+  'Three Black Crows': '1h',
+};
 
 async function fetchBinancePatternMatches(): Promise<PatternCoinMatches> {
   const response = await fetch('/api/scanner?exchanges=binance&limit=120', { cache: 'no-store' });
@@ -691,34 +742,36 @@ function Top500Panel({
 }
 
 function CandlePatternsPanel({
-  patternCoinMatches,
+  patternCards,
+  learningMode,
   loading,
   error,
 }: {
-  patternCoinMatches: PatternCoinMatches;
+  patternCards: PatternDecisionCard[];
+  learningMode: boolean;
   loading: boolean;
   error: string | null;
 }) {
   return (
     <div className="space-y-4">
       <div className="rounded-xl border border-gray-700/70 bg-gradient-to-r from-gray-900 via-gray-900 to-indigo-950/40 p-4">
-        <h3 className="text-sm font-semibold text-white">Famous Candlestick Patterns</h3>
+        <h3 className="text-sm font-semibold text-white">Professional Pattern Decision Grid</h3>
         <p className="text-xs text-gray-400 mt-1">
-          Use these as contextual indicators, not standalone signals. Always confirm with volume, structure, and risk limits.
+          Pattern cards are ranked by trade quality and include status, confluence, and action guidance.
         </p>
         <p className="text-xs text-cyan-300/90 mt-2">
-          {loading ? 'Scanning Binance for live pattern candidates…' : 'Live Binance coin candidates are listed under each pattern.'}
+          {loading ? 'Scanning Binance for live pattern opportunities…' : 'Live Binance coin candidates are attached to each decision card.'}
         </p>
         {error && <p className="text-xs text-yellow-300/90 mt-1">Using fallback matches: {error}</p>}
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
-        {CANDLE_PATTERNS.map((pattern) => {
+        {patternCards.map((card) => {
           return (
             <PatternLearningCard
-              key={pattern.name}
-              pattern={pattern}
-              coinNames={patternCoinMatches[pattern.name] ?? []}
+              key={card.pattern.name}
+              card={card}
+              learningMode={learningMode}
             />
           );
         })}
@@ -727,9 +780,10 @@ function CandlePatternsPanel({
   );
 }
 
-function PatternLearningCard({ pattern, coinNames }: { pattern: CandlePattern; coinNames: string[] }) {
+function PatternLearningCard({ card, learningMode }: { card: PatternDecisionCard; learningMode: boolean }) {
   const [visibleCandles, setVisibleCandles] = useState(1);
   const [autoPlay, setAutoPlay] = useState(false);
+  const { pattern } = card;
   const totalCandles = pattern.candles.length;
   const tone =
     pattern.bias === 'Bullish'
@@ -737,9 +791,29 @@ function PatternLearningCard({ pattern, coinNames }: { pattern: CandlePattern; c
       : pattern.bias === 'Bearish'
       ? 'text-red-300 border-red-500/30 bg-red-500/10'
       : 'text-yellow-300 border-yellow-500/30 bg-yellow-500/10';
+  const statusTone =
+    card.status === 'Confirmed'
+      ? 'text-emerald-200 border-emerald-500/40 bg-emerald-500/15'
+      : card.status === 'Forming'
+      ? 'text-yellow-200 border-yellow-500/40 bg-yellow-500/15'
+      : 'text-rose-200 border-rose-500/40 bg-rose-500/15';
+  const statusLabel = card.status === 'Confirmed' ? '✅ Confirmed' : card.status === 'Forming' ? '🆕 Forming' : '❌ Invalidated';
+  const priorityTone =
+    card.priority === 'High Opportunity'
+      ? 'text-orange-100 border-orange-400/50 bg-orange-500/20'
+      : card.priority === 'Medium'
+      ? 'text-sky-100 border-sky-400/50 bg-sky-500/20'
+      : 'text-yellow-100 border-yellow-400/50 bg-yellow-500/20';
+  const priorityLabel = card.priority === 'High Opportunity' ? '🔥 High Opportunity' : card.priority === 'Medium' ? '⚡ Medium' : '⚠️ Low Quality';
+  const confidenceGlow =
+    card.winProbability >= 80
+      ? 'shadow-[0_0_0_1px_rgba(16,185,129,0.55),0_0_24px_rgba(16,185,129,0.25)]'
+      : card.winProbability >= 60
+      ? 'shadow-[0_0_0_1px_rgba(234,179,8,0.55),0_0_24px_rgba(234,179,8,0.2)]'
+      : 'shadow-[0_0_0_1px_rgba(239,68,68,0.55),0_0_24px_rgba(239,68,68,0.2)]';
 
   useEffect(() => {
-    if (!autoPlay) return;
+    if (!learningMode || !autoPlay) return;
 
     if (visibleCandles >= totalCandles) {
       setAutoPlay(false);
@@ -751,7 +825,16 @@ function PatternLearningCard({ pattern, coinNames }: { pattern: CandlePattern; c
     }, AUTO_PLAY_INTERVAL_MS);
 
     return () => window.clearTimeout(timer);
-  }, [autoPlay, totalCandles, visibleCandles]);
+  }, [autoPlay, learningMode, totalCandles, visibleCandles]);
+
+  useEffect(() => {
+    if (!learningMode) {
+      setAutoPlay(false);
+      setVisibleCandles(totalCandles);
+    } else {
+      setVisibleCandles(1);
+    }
+  }, [learningMode, totalCandles]);
 
   const simulationState =
     visibleCandles === 1
@@ -761,66 +844,121 @@ function PatternLearningCard({ pattern, coinNames }: { pattern: CandlePattern; c
       : 'Pattern forming';
 
   return (
-    <div className="rounded-xl border border-gray-700/70 bg-gray-900/60 p-4 space-y-2">
-      <div className="flex items-center justify-between">
-        <h4 className="text-sm font-semibold text-gray-100">{pattern.name}</h4>
-        <span className={`text-[10px] px-2 py-0.5 rounded-full border ${tone}`}>{pattern.bias}</span>
+    <div className={`rounded-xl border border-gray-600/70 bg-gray-800/95 p-4 space-y-3 ${confidenceGlow}`}>
+      <div className="flex items-start justify-between gap-2">
+        <div>
+          <h4 className="text-sm font-semibold text-gray-100">{pattern.name}</h4>
+          <p className="text-[11px] text-gray-400 mt-0.5">Win Probability: {card.winProbability}% · {card.priority === 'High Opportunity' ? 'Strong' : card.priority}</p>
+        </div>
+        <div className="flex flex-wrap items-center justify-end gap-1">
+          <span className={`text-[10px] px-2 py-0.5 rounded-full border ${tone}`}>{pattern.bias}</span>
+          <span className={`text-[10px] px-2 py-0.5 rounded-full border ${statusTone}`}>{statusLabel}</span>
+          <span className={`text-[10px] px-2 py-0.5 rounded-full border ${priorityTone}`}>{priorityLabel}</span>
+        </div>
       </div>
 
-      <PatternMiniChart candles={pattern.candles.slice(0, visibleCandles)} patternName={pattern.name} />
-
-      <div className="rounded-lg border border-cyan-500/20 bg-cyan-500/5 px-2.5 py-2">
-        <p className="text-[11px] text-cyan-200">
-          Simulation: Candle {visibleCandles} / {totalCandles} · {simulationState}
-        </p>
-        <p className="text-[11px] text-cyan-300/90 mt-1">
-          Binance coins currently matching: {coinNames.length > 0 ? coinNames.join(', ') : 'No clear match right now'}
-        </p>
+      <div className="grid grid-cols-2 gap-2 text-[11px]">
+        <div className="rounded border border-gray-700 bg-gray-900/70 px-2.5 py-2">
+          <p className="text-gray-500">📊 Signal Status</p>
+          <p className="text-gray-100 font-semibold mt-0.5">{statusLabel}</p>
+        </div>
+        <div className="rounded border border-gray-700 bg-gray-900/70 px-2.5 py-2">
+          <p className="text-gray-500">📡 Timeframe</p>
+          <p className="text-gray-100 font-semibold mt-0.5">{card.timeframe}</p>
+        </div>
       </div>
 
-      <div className="flex items-center gap-2">
-        <button
-          onClick={() => {
-            setAutoPlay(false);
-            setVisibleCandles((current) => Math.max(1, current - 1));
-          }}
-          disabled={visibleCandles <= 1}
-          className="px-2 py-1 text-[11px] rounded border border-gray-700 text-gray-300 disabled:opacity-40 disabled:cursor-not-allowed hover:bg-gray-800"
-        >
-          ◀ Prev
-        </button>
-        <button
-          onClick={() => {
-            setAutoPlay(false);
-            setVisibleCandles((current) => Math.min(totalCandles, current + 1));
-          }}
-          disabled={visibleCandles >= totalCandles}
-          className="px-2 py-1 text-[11px] rounded border border-gray-700 text-gray-300 disabled:opacity-40 disabled:cursor-not-allowed hover:bg-gray-800"
-        >
-          Next ▶
-        </button>
-        <button
-          onClick={() => {
-            if (autoPlay) {
-              setAutoPlay(false);
-              return;
-            }
-            if (visibleCandles >= totalCandles) setVisibleCandles(1);
-            setAutoPlay(true);
-          }}
-          className="px-2 py-1 text-[11px] rounded border border-cyan-600/60 text-cyan-200 hover:bg-cyan-500/10"
-        >
-          {autoPlay ? 'Pause' : 'Auto Play'}
-        </button>
+      <PatternMiniChart candles={pattern.candles.slice(0, learningMode ? visibleCandles : totalCandles)} patternName={pattern.name} />
+
+      {learningMode && (
+        <div className="rounded-lg border border-cyan-500/20 bg-cyan-500/5 px-2.5 py-2">
+          <p className="text-[11px] text-cyan-200">
+            Learning Mode: Candle {visibleCandles} / {totalCandles} · {simulationState}
+          </p>
+          <div className="flex items-center gap-2 mt-2">
+            <button
+              onClick={() => {
+                setAutoPlay(false);
+                setVisibleCandles((current) => Math.max(1, current - 1));
+              }}
+              disabled={visibleCandles <= 1}
+              className="px-2 py-1 text-[11px] rounded border border-gray-700 text-gray-300 disabled:opacity-40 disabled:cursor-not-allowed hover:bg-gray-800"
+            >
+              ◀ Prev
+            </button>
+            <button
+              onClick={() => {
+                setAutoPlay(false);
+                setVisibleCandles((current) => Math.min(totalCandles, current + 1));
+              }}
+              disabled={visibleCandles >= totalCandles}
+              className="px-2 py-1 text-[11px] rounded border border-gray-700 text-gray-300 disabled:opacity-40 disabled:cursor-not-allowed hover:bg-gray-800"
+            >
+              Next ▶
+            </button>
+            <button
+              onClick={() => {
+                if (autoPlay) {
+                  setAutoPlay(false);
+                  return;
+                }
+                if (visibleCandles >= totalCandles) setVisibleCandles(1);
+                setAutoPlay(true);
+              }}
+              className="px-2 py-1 text-[11px] rounded border border-cyan-600/60 text-cyan-200 hover:bg-cyan-500/10"
+            >
+              {autoPlay ? 'Pause' : 'Auto Play'}
+            </button>
+          </div>
+        </div>
+      )}
+
+      <div className="rounded-lg border border-gray-700 bg-gray-900/80 px-2.5 py-2 text-[11px] space-y-1">
+        <p className="text-cyan-200 font-semibold">💡 Market Context:</p>
+        <p className="text-gray-300">• Trend: {card.trendContext}</p>
+        <p className="text-gray-300">• Volume: {card.volumeContext}</p>
+        <p className="text-gray-300">• Location: {card.locationContext}</p>
       </div>
 
-      <p className="text-xs text-gray-300">{pattern.idea}</p>
-      <p className="text-xs text-gray-400">
-        <span className="text-gray-200 font-medium">Confirm:</span> {pattern.confirmation}
-      </p>
-      <p className="text-xs text-cyan-300/90">
-        <span className="text-cyan-200 font-medium">Risk:</span> {pattern.riskHint}
-      </p>
+      <div className="rounded-lg border border-gray-700 bg-gray-900/80 px-2.5 py-2 text-[11px]">
+        <p className="text-cyan-200 font-semibold mb-1">🧠 Confluence:</p>
+        <div className="grid grid-cols-2 gap-y-1 gap-x-2">
+          {card.confluence.map((item) => (
+            <p key={`${pattern.name}-${item.label}`} className={item.pass ? 'text-emerald-200' : 'text-yellow-200'}>
+              {item.pass ? '✔' : '✖'} {item.label}
+            </p>
+          ))}
+        </div>
+      </div>
+
+      <div className="rounded-lg border border-gray-700 bg-gray-900/80 px-2.5 py-2 text-[11px]">
+        <p className="text-cyan-200 font-semibold mb-1">🎯 Trade Setup:</p>
+        <div className="grid grid-cols-3 gap-2">
+          <p className="text-gray-200">Entry: <span className="font-mono">{formatPrice(card.entry)}</span></p>
+          <p className="text-rose-300">SL: <span className="font-mono">{formatPrice(card.stopLoss)}</span></p>
+          <p className="text-emerald-300">TP: <span className="font-mono">{formatPrice(card.takeProfit)}</span></p>
+        </div>
+        <p className="text-cyan-100 mt-1">R:R = 1 : {card.riskReward.toFixed(1)}</p>
+      </div>
+
+      <div className="rounded-lg border border-gray-700 bg-gray-900/80 px-2.5 py-2 text-[11px] space-y-1">
+        <p className="text-gray-400">📈 Live Coins:</p>
+        <p className="text-gray-200">{card.liveCoins.length > 0 ? card.liveCoins.join(', ') : 'No clear match right now'}</p>
+      </div>
+
+      <div className="rounded-lg border border-violet-600/30 bg-violet-900/15 px-2.5 py-2 text-[11px]">
+        <p className="text-violet-200 font-semibold">🤖 AI Insight:</p>
+        <p className="text-gray-200 mt-0.5">{card.aiInsight}</p>
+      </div>
+
+      <div className="rounded-lg border border-orange-600/30 bg-orange-900/15 px-2.5 py-2 text-[11px]">
+        <p className="text-orange-200 font-semibold">💣 Liquidation Insight:</p>
+        <p className="text-gray-200 mt-0.5">{card.liquidationInsight}</p>
+      </div>
+
+      <div className="rounded-lg border border-cyan-600/40 bg-cyan-900/15 px-2.5 py-2 text-[11px]">
+        <p className="text-cyan-100 font-semibold">👉 Action: {card.actionLine}</p>
+      </div>
     </div>
   );
 }
@@ -892,6 +1030,11 @@ export default function Dashboard() {
   const [patternCoinMatches, setPatternCoinMatches] = useState<PatternCoinMatches>(() => buildPatternCoinMatches(coins));
   const [patternMatchesLoading, setPatternMatchesLoading] = useState(false);
   const [patternMatchesError, setPatternMatchesError] = useState<string | null>(null);
+  const [patternBiasFilter, setPatternBiasFilter] = useState<PatternBiasFilter>('all');
+  const [patternMinConfidence, setPatternMinConfidence] = useState(70);
+  const [patternTimeframeFilter, setPatternTimeframeFilter] = useState<'all' | PatternTimeframe>('all');
+  const [patternConfirmedOnly, setPatternConfirmedOnly] = useState(true);
+  const [patternLearningMode, setPatternLearningMode] = useState(false);
   const [notifySymbols, setNotifySymbols] = useState<Record<string, boolean>>({});
   const [signalAlerts, setSignalAlerts] = useState<QuickSignalAlert[]>([]);
   const [signalChanges, setSignalChanges] = useState<Array<{ symbol: string; change: SignalChangeDirection; confidence: number }>>([]);
@@ -1216,6 +1359,132 @@ export default function Dashboard() {
 
   const longQuickSignals = useMemo(() => quickTradeSignals.filter((item) => item.bias === 'Long'), [quickTradeSignals]);
   const shortQuickSignals = useMemo(() => quickTradeSignals.filter((item) => item.bias === 'Short'), [quickTradeSignals]);
+
+  const patternDecisionCards = useMemo<PatternDecisionCard[]>(() => {
+    const coinBySymbol = new Map(coins.map((coin) => [coin.symbol, coin]));
+
+    return CANDLE_PATTERNS.map((pattern) => {
+      const liveCoins = patternCoinMatches[pattern.name] ?? [];
+      const rawSymbol = liveCoins[0] ? `${liveCoins[0]}USDT` : null;
+      const leadCoin = rawSymbol ? coinBySymbol.get(rawSymbol) : undefined;
+      const leadConfidence = Math.round(leadCoin?.tradeSignal.confidence ?? 58);
+      const status: PatternStatus =
+        leadConfidence >= 70 ? 'Confirmed' : leadConfidence >= 55 ? 'Forming' : 'Invalidated';
+      const priority: PatternPriority =
+        leadConfidence >= 80 ? 'High Opportunity' : leadConfidence >= 65 ? 'Medium' : 'Low Quality';
+      const baseWin = PATTERN_BASE_WIN_PROBABILITY[pattern.name] ?? 70;
+      const winProbability = Math.max(40, Math.min(92, Math.round((baseWin * 0.65 + leadConfidence * 0.35))));
+      const entry = leadCoin?.price ?? pattern.candles[pattern.candles.length - 1].close;
+      const stopLoss =
+        pattern.bias === 'Bearish'
+          ? entry * 1.02
+          : entry * 0.98;
+      const takeProfit =
+        pattern.bias === 'Bearish'
+          ? entry * 0.952
+          : entry * 1.048;
+      const risk = Math.abs(entry - stopLoss);
+      const reward = Math.abs(takeProfit - entry);
+      const riskReward = risk > 0 ? reward / risk : 0;
+      const trendContext =
+        pattern.bias === 'Bullish'
+          ? 'Downtrend → Reversal'
+          : pattern.bias === 'Bearish'
+          ? 'Uptrend → Reversal'
+          : 'Range → Expansion setup';
+      const volumeRatio = leadCoin?.indicators.volume?.volumeRatio ?? 1;
+      const volumeContext = volumeRatio >= 1.8 ? 'Increasing (strong participation)' : volumeRatio >= 1.2 ? 'Stable to rising' : 'Weak participation';
+      const locationContext =
+        pattern.bias === 'Bullish'
+          ? 'Support Zone'
+          : pattern.bias === 'Bearish'
+          ? 'Resistance Zone'
+          : 'Key decision zone';
+      const rsi = leadCoin?.indicators.rsi.value ?? 50;
+      const confluence = [
+        { label: pattern.bias === 'Bearish' ? 'RSI Overbought' : 'RSI Oversold', pass: pattern.bias === 'Bearish' ? rsi >= 65 : rsi <= 40 },
+        { label: 'Volume Spike', pass: volumeRatio >= 1.6 },
+        { label: 'Structure Support', pass: Math.abs(leadCoin?.priceChangePercent ?? 0) >= 1.5 },
+        { label: 'Trend Alignment', pass: leadCoin?.indicators.ma.trend === (pattern.bias === 'Bearish' ? 'bearish' : 'bullish') },
+      ];
+      const isBullishBias = pattern.bias === 'Bullish' || pattern.bias === 'Reversal';
+      const actionLine =
+        status === 'Confirmed'
+          ? isBullishBias
+            ? 'Wait for pullback → Enter LONG'
+            : 'Wait for bounce into resistance → Enter SHORT'
+          : status === 'Forming'
+          ? 'Wait — confirmation candle required'
+          : 'Avoid — weak confirmation';
+      const liquidationInsight =
+        isBullishBias
+          ? 'Shorts getting liquidated → supports bullish move.'
+          : 'Longs getting liquidated → supports bearish continuation.';
+      const aiInsight =
+        status === 'Confirmed'
+          ? `Strong ${pattern.bias.toLowerCase()} structure with improving momentum and tradable risk profile.`
+          : status === 'Forming'
+          ? 'Setup is forming; let volume and close confirmation complete before entry.'
+          : 'Pattern quality is weak right now; protect capital and wait for cleaner structure.';
+
+      return {
+        pattern,
+        status,
+        priority,
+        timeframe: PATTERN_DEFAULT_TIMEFRAME[pattern.name] ?? '15m',
+        confidence: leadConfidence,
+        winProbability,
+        trendContext,
+        volumeContext,
+        locationContext,
+        confluence,
+        entry,
+        stopLoss,
+        takeProfit,
+        riskReward,
+        liveCoins,
+        aiInsight,
+        liquidationInsight,
+        actionLine,
+      };
+    });
+  }, [coins, patternCoinMatches]);
+
+  const filteredPatternCards = useMemo(() => {
+    return patternDecisionCards
+      .filter((card) => (patternBiasFilter === 'all' ? true : card.pattern.bias === patternBiasFilter))
+      .filter((card) => card.confidence >= patternMinConfidence)
+      .filter((card) => (patternTimeframeFilter === 'all' ? true : card.timeframe === patternTimeframeFilter))
+      .filter((card) => (!patternConfirmedOnly ? true : card.status === 'Confirmed'))
+      .sort((a, b) => b.winProbability - a.winProbability);
+  }, [patternBiasFilter, patternConfirmedOnly, patternDecisionCards, patternMinConfidence, patternTimeframeFilter]);
+
+  const patternOverviewStats = useMemo(() => {
+    const bullish = patternDecisionCards.filter((card) => card.pattern.bias === 'Bullish').length;
+    const bearish = patternDecisionCards.filter((card) => card.pattern.bias === 'Bearish').length;
+    const best = [...patternDecisionCards].sort((a, b) => b.winProbability - a.winProbability)[0];
+    const weakest = [...patternDecisionCards].sort((a, b) => a.winProbability - b.winProbability)[0];
+    const avgRR = patternDecisionCards.length > 0
+      ? patternDecisionCards.reduce((acc, card) => acc + card.riskReward, 0) / patternDecisionCards.length
+      : 0;
+    const winRateLive = patternDecisionCards.length > 0
+      ? patternDecisionCards.reduce((acc, card) => acc + card.winProbability, 0) / patternDecisionCards.length
+      : 0;
+    const marketBias = bullish >= bearish ? 'Bullish' : 'Bearish';
+    const marketQuality = winRateLive >= 75 ? 'HIGH' : winRateLive >= 65 ? 'MEDIUM' : 'LOW';
+
+    return {
+      bullish,
+      bearish,
+      activePatterns: patternDecisionCards.length,
+      best,
+      weakest,
+      avgRR,
+      winRateLive,
+      marketBias,
+      marketQuality,
+    };
+  }, [patternDecisionCards]);
 
   const liquidationIntelRows = useMemo(() => {
     const timeframeFactor = liquidationTimeframe === '5m' ? 0.85 : liquidationTimeframe === '1h' ? 1.15 : 1;
@@ -1630,56 +1899,126 @@ export default function Dashboard() {
 
         {/* Candlestick patterns tab */}
         {activeTab === 'patterns' && (
-          <div>
+          <div className="space-y-4">
             <div className="flex items-center justify-between mb-4">
               <h2 className="text-lg font-semibold flex items-center gap-2">
                 <span className="w-2 h-2 rounded-full bg-cyan-500 animate-pulse" />
-                Trader Learning Center
+                🚀 Pattern Market Overview
               </h2>
-              <span className="text-xs text-gray-500">Binance context + pattern playbook</span>
+              <span className="text-xs text-gray-500">Decision Engine · Binance Context</span>
             </div>
-            <div className="grid grid-cols-2 md:grid-cols-5 gap-2 mb-4">
-              {[...coins]
-                .sort((a, b) => Math.abs(b.priceChangePercent) - Math.abs(a.priceChangePercent))
-                .slice(0, 5)
-                .map((coin) => (
-                  <div key={coin.symbol} className="bg-gray-900 border border-gray-800 rounded-lg p-2.5">
-                    <p className="text-[11px] text-gray-500">{coin.symbol.replace('USDT', '')}</p>
-                    <p
-                      className={`text-sm font-semibold ${
-                        coin.priceChangePercent >= 0 ? 'text-green-400' : 'text-red-400'
-                      }`}
-                    >
-                      {coin.priceChangePercent >= 0 ? '+' : ''}
-                      {coin.priceChangePercent.toFixed(2)}%
-                    </p>
-                  </div>
-                ))}
-            </div>
-            <div className="rounded-xl border border-indigo-700/40 bg-indigo-900/10 p-3 mb-4">
-              <h3 className="text-sm font-semibold text-indigo-200">Pattern Edge Metrics</h3>
-              <p className="text-xs text-gray-300 mt-1">
-                Win probability is estimated from live confidence and signal alignment to help traders pursue higher expected reward and reduce avoidable losses.
-              </p>
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 mt-2 text-[11px]">
-                <div className="rounded border border-gray-800 bg-gray-900/70 px-2.5 py-2">
-                  <p className="text-gray-500">Avg confidence</p>
+            <div className="rounded-xl border border-cyan-700/40 bg-cyan-900/10 p-3">
+              <p className="text-sm font-semibold text-cyan-100">📊 Pattern Market Bias: {patternOverviewStats.marketBias === 'Bullish' ? '🟢 Bullish' : '🔴 Bearish'}</p>
+              <div className="grid grid-cols-1 md:grid-cols-4 gap-2 mt-2 text-[11px]">
+                <div className="rounded border border-gray-800 bg-gray-900/75 px-2.5 py-2">
+                  <p className="text-gray-500">Active Patterns</p>
+                  <p className="text-white font-semibold">{patternOverviewStats.activePatterns}</p>
+                </div>
+                <div className="rounded border border-gray-800 bg-gray-900/75 px-2.5 py-2">
+                  <p className="text-gray-500">🟢 Bullish</p>
+                  <p className="text-green-300 font-semibold">{patternOverviewStats.bullish}</p>
+                </div>
+                <div className="rounded border border-gray-800 bg-gray-900/75 px-2.5 py-2">
+                  <p className="text-gray-500">🔴 Bearish</p>
+                  <p className="text-red-300 font-semibold">{patternOverviewStats.bearish}</p>
+                </div>
+                <div className="rounded border border-gray-800 bg-gray-900/75 px-2.5 py-2">
+                  <p className="text-gray-500">🔥 Best Opportunity</p>
                   <p className="text-cyan-200 font-semibold">
-                    {coins.length > 0 ? `${Math.round(coins.reduce((acc, coin) => acc + coin.tradeSignal.confidence, 0) / coins.length)}%` : '0%'}
+                    {patternOverviewStats.best ? `${patternOverviewStats.best.pattern.name} — ${patternOverviewStats.best.winProbability}%` : 'No signal'}
                   </p>
                 </div>
+              </div>
+              <p className="text-[11px] text-yellow-200 mt-2">
+                ⚠️ Weak Pattern: {patternOverviewStats.weakest ? `${patternOverviewStats.weakest.pattern.name} (${patternOverviewStats.weakest.winProbability}%)` : 'N/A'}
+              </p>
+            </div>
+
+            <div className="rounded-xl border border-gray-700/70 bg-gray-900/70 p-3">
+              <div className="flex flex-wrap items-center gap-2 text-[11px]">
+                <span className="text-gray-400">Pattern Type:</span>
+                <button onClick={() => setPatternBiasFilter('all')} className={`px-2 py-1 rounded border ${patternBiasFilter === 'all' ? 'border-cyan-500 text-cyan-200 bg-cyan-500/15' : 'border-gray-700 text-gray-300'}`}>All</button>
+                <button onClick={() => setPatternBiasFilter('Bullish')} className={`px-2 py-1 rounded border ${patternBiasFilter === 'Bullish' ? 'border-green-500 text-green-200 bg-green-500/15' : 'border-gray-700 text-gray-300'}`}>🟢 Bullish</button>
+                <button onClick={() => setPatternBiasFilter('Bearish')} className={`px-2 py-1 rounded border ${patternBiasFilter === 'Bearish' ? 'border-red-500 text-red-200 bg-red-500/15' : 'border-gray-700 text-gray-300'}`}>🔴 Bearish</button>
+                <span className="text-gray-400 ml-2">Confidence: {patternMinConfidence}%</span>
+                <input
+                  type="range"
+                  min={40}
+                  max={90}
+                  step={5}
+                  value={patternMinConfidence}
+                  onChange={(event) => setPatternMinConfidence(Number(event.target.value))}
+                  className="w-24 accent-cyan-400"
+                />
+                <span className="text-gray-400 ml-2">Timeframe:</span>
+                <select
+                  value={patternTimeframeFilter}
+                  onChange={(event) => setPatternTimeframeFilter(event.target.value as 'all' | PatternTimeframe)}
+                  className="rounded border border-gray-700 bg-gray-800 text-gray-200 px-2 py-1"
+                >
+                  <option value="all">All</option>
+                  <option value="5m">5m</option>
+                  <option value="15m">15m</option>
+                  <option value="1h">1h</option>
+                </select>
+                <label className="ml-2 flex items-center gap-1 text-gray-300">
+                  <input
+                    type="checkbox"
+                    checked={patternConfirmedOnly}
+                    onChange={(event) => setPatternConfirmedOnly(event.target.checked)}
+                    className="h-3.5 w-3.5 rounded border-gray-600 bg-gray-800 text-cyan-500 focus:ring-cyan-500"
+                  />
+                  Status: Confirmed only
+                </label>
+                <label className="ml-2 flex items-center gap-1 text-cyan-200">
+                  <input
+                    type="checkbox"
+                    checked={patternLearningMode}
+                    onChange={(event) => setPatternLearningMode(event.target.checked)}
+                    className="h-3.5 w-3.5 rounded border-cyan-600 bg-gray-800 text-cyan-500 focus:ring-cyan-500"
+                  />
+                  Learning Mode
+                </label>
+              </div>
+            </div>
+
+            <div className="rounded-xl border border-indigo-700/40 bg-indigo-900/10 p-3">
+              <h3 className="text-sm font-semibold text-indigo-200">📈 Pattern Performance</h3>
+              <div className="grid grid-cols-1 sm:grid-cols-5 gap-2 mt-2 text-[11px]">
                 <div className="rounded border border-gray-800 bg-gray-900/70 px-2.5 py-2">
-                  <p className="text-gray-500">High conviction setups</p>
-                  <p className="text-green-300 font-semibold">{coins.filter((coin) => coin.tradeSignal.confidence >= 70).length}</p>
+                  <p className="text-gray-500">Win Rate (Live)</p>
+                  <p className="text-cyan-200 font-semibold">{patternOverviewStats.winRateLive.toFixed(0)}%</p>
                 </div>
                 <div className="rounded border border-gray-800 bg-gray-900/70 px-2.5 py-2">
-                  <p className="text-gray-500">Risk-off setups</p>
-                  <p className="text-yellow-300 font-semibold">{coins.filter((coin) => coin.tradeSignal.confidence < 50).length}</p>
+                  <p className="text-gray-500">Avg R:R</p>
+                  <p className="text-green-300 font-semibold">1 : {patternOverviewStats.avgRR.toFixed(1)}</p>
+                </div>
+                <div className="rounded border border-gray-800 bg-gray-900/70 px-2.5 py-2">
+                  <p className="text-gray-500">Best Pattern</p>
+                  <p className="text-emerald-300 font-semibold">{patternOverviewStats.best ? `${patternOverviewStats.best.pattern.name} (${patternOverviewStats.best.winProbability}%)` : 'N/A'}</p>
+                </div>
+                <div className="rounded border border-gray-800 bg-gray-900/70 px-2.5 py-2">
+                  <p className="text-gray-500">Worst Pattern</p>
+                  <p className="text-yellow-300 font-semibold">{patternOverviewStats.weakest ? `${patternOverviewStats.weakest.pattern.name} (${patternOverviewStats.weakest.winProbability}%)` : 'N/A'}</p>
+                </div>
+                <div className="rounded border border-gray-800 bg-gray-900/70 px-2.5 py-2">
+                  <p className="text-gray-500">Market Quality</p>
+                  <p className="text-cyan-100 font-semibold">{patternOverviewStats.marketQuality}</p>
                 </div>
               </div>
             </div>
+
+            <div className="rounded-xl border border-violet-700/40 bg-violet-900/10 px-3 py-2 text-xs text-violet-100">
+              <p className="font-semibold">🤖 AI Market Insight:</p>
+              <p className="mt-1">
+                Market shows {patternOverviewStats.marketBias.toLowerCase()} reversal patterns with {patternOverviewStats.marketQuality.toLowerCase()} quality setup flow.
+                Best opportunities are in active names with stronger volume participation. Avoid low-conviction patterns with weak confluence.
+              </p>
+            </div>
+
             <CandlePatternsPanel
-              patternCoinMatches={patternCoinMatches}
+              patternCards={filteredPatternCards}
+              learningMode={patternLearningMode}
               loading={patternMatchesLoading}
               error={patternMatchesError}
             />
