@@ -25,7 +25,6 @@ import { SupportedExchange } from '@/lib/exchangeMarket';
 import { CoinAnalysis } from '@/lib/types';
 
 type ApiKeyOptionId = SupportedExchange | 'coingecko';
-const isExchangeOption = (value: ApiKeyOptionId): value is SupportedExchange => value !== 'coingecko';
 
 const API_KEY_OPTIONS: Array<{ id: ApiKeyOptionId; label: string; envKey: string }> = [
   { id: 'binance', label: 'Binance API Key', envKey: 'BINANCE_API_KEY' },
@@ -1053,42 +1052,35 @@ function ExchangeSelector({
   isCoinGeckoKeySelected: boolean;
   onCoinGeckoKeySelectedChange: (selected: boolean) => void;
 }) {
-  const toggleExchange = (exchange: SupportedExchange) => {
-    const nextSelection = selectedExchanges.includes(exchange)
-      ? selectedExchanges.filter((item) => item !== exchange)
-      : [...selectedExchanges, exchange];
-    if (nextSelection.length > 0) {
-      onSelectedExchangesChange(nextSelection);
+  const selectedOption: ApiKeyOptionId = isCoinGeckoKeySelected ? 'coingecko' : selectedExchanges[0] ?? 'binance';
+
+  const selectOption = (option: ApiKeyOptionId) => {
+    if (option === 'coingecko') {
+      onCoinGeckoKeySelectedChange(true);
+      return;
     }
+    onSelectedExchangesChange([option]);
+    onCoinGeckoKeySelectedChange(false);
   };
 
   return (
     <div className="bg-gray-900 border border-gray-800 rounded-lg p-3 mb-4">
-      <p className="text-xs text-gray-400 mb-2">Select exchange API key(s) for all dashboard tabs</p>
+      <p className="text-xs text-gray-400 mb-2">Select one exchange API key for all dashboard tabs</p>
       <div className="grid grid-cols-1 sm:grid-cols-4 gap-2">
         {API_KEY_OPTIONS.map((option) => (
           <label
             key={option.id}
             className={`flex items-start gap-2 rounded border px-3 py-2 cursor-pointer transition-colors ${
-              isExchangeOption(option.id)
-                ? selectedExchanges.includes(option.id)
-                  ? 'border-cyan-500 bg-cyan-500/10'
-                  : 'border-gray-700 bg-gray-800/40 hover:border-gray-600'
-                : isCoinGeckoKeySelected
-                  ? 'border-cyan-500 bg-cyan-500/10'
-                  : 'border-gray-700 bg-gray-800/40 hover:border-gray-600'
+              selectedOption === option.id
+                ? 'border-cyan-500 bg-cyan-500/10'
+                : 'border-gray-700 bg-gray-800/40 hover:border-gray-600'
             }`}
           >
             <input
-              type="checkbox"
-              checked={isExchangeOption(option.id) ? selectedExchanges.includes(option.id) : isCoinGeckoKeySelected}
-              onChange={() => {
-                if (isExchangeOption(option.id)) {
-                  toggleExchange(option.id);
-                  return;
-                }
-                onCoinGeckoKeySelectedChange(!isCoinGeckoKeySelected);
-              }}
+              type="radio"
+              name="dashboard-api-key-option"
+              checked={selectedOption === option.id}
+              onChange={() => selectOption(option.id)}
               className="mt-0.5 h-4 w-4 rounded border-gray-600 bg-gray-800 text-cyan-500 focus:ring-cyan-500"
             />
             <span className="text-sm text-white leading-tight">
