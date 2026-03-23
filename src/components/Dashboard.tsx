@@ -8,6 +8,7 @@
 import { useState, useMemo, useEffect, useCallback, useRef } from 'react';
 import { useMarketData } from '@/hooks/useMarketData';
 import { useWatchList } from '@/hooks/useWatchList';
+import { useCustomMarketPairs } from '@/hooks/useCustomMarketPairs';
 import { filterCoins, SignalFilter, SortField } from '@/hooks/useCoinSearch';
 import { formatPrice, formatVolume } from '@/lib/utils';
 import MarketScanner from './MarketScanner';
@@ -18,8 +19,10 @@ import CoinPagination from './CoinPagination';
 import MarketOverviewPanel from './MarketOverviewPanel';
 import LiveSignalMarquee from './LiveSignalMarquee';
 import PortfolioNotifications from './PortfolioNotifications';
+import AddMarketPairModal from './AddMarketPairModal';
 import { usePortfolioNotifications } from '@/hooks/usePortfolioNotifications';
 import { SupportedExchange } from '@/lib/exchangeMarket';
+import { CoinAnalysis } from '@/lib/types';
 
 const EXCHANGE_OPTIONS: Array<{ id: SupportedExchange; label: string; envKey: string }> = [
   { id: 'binance', label: 'Binance API Key', envKey: 'BINANCE_API_KEY' },
@@ -580,9 +583,15 @@ function PatternMiniChart({
 function Top500Panel({
   selectedExchanges,
   isWatching,
+  customPairs,
+  customCoins,
+  onOpenAddMarketPair,
 }: {
   selectedExchanges: SupportedExchange[];
   isWatching: (symbol: string) => boolean;
+  customPairs: string[];
+  customCoins: CoinAnalysis[];
+  onOpenAddMarketPair: () => void;
 }) {
   const [coins, setCoins] = useState<TopCoin[]>([]);
   const [loading, setLoading] = useState(true);
@@ -623,15 +632,34 @@ function Top500Panel({
     fetchPage(1, sort);
   }, [sort, fetchPage]);
 
-  // Client-side search filter
+  // Client-side search filter + custom pair prioritization
   const displayCoins = useMemo(() => {
-    let filtered = coins;
+    let filtered = [...coins];
     if (search.trim()) {
       const q = search.trim().toUpperCase().replace('USDT', '');
       filtered = filtered.filter((c) => c.symbol.replace('USDT', '').includes(q));
     }
+    if (customPairs.length > 0) {
+      const customSet = new Set(customPairs);
+      const customRowsFromTop = filtered.filter((coin) => customSet.has(coin.symbol));
+      const missingCustomRows: TopCoin[] = customCoins
+        .filter((coin) => customSet.has(coin.symbol))
+        .filter((coin) => !customRowsFromTop.some((row) => row.symbol === coin.symbol))
+        .map((coin) => ({
+          symbol: coin.symbol,
+          price: coin.price,
+          priceChange: coin.priceChange24h,
+          priceChangePercent: coin.priceChangePercent,
+          volume24h: coin.volume24h,
+          high24h: coin.high24h,
+          low24h: coin.low24h,
+          rank: 0,
+        }));
+      const regularRows = filtered.filter((coin) => !customSet.has(coin.symbol));
+      filtered = [...customRowsFromTop, ...missingCustomRows, ...regularRows];
+    }
     return filtered;
-  }, [coins, search]);
+  }, [coins, search, customCoins, customPairs]);
 
   const SORTS: { value: Top500SortField; label: string }[] = [
     { value: 'volume', label: 'Volume' },
@@ -663,6 +691,14 @@ function Top500Panel({
           />
         </div>
 
+        <button
+          type="button"
+          onClick={onOpenAddMarketPair}
+          className="px-3 py-2 rounded-lg border border-cyan-600/50 bg-cyan-900/20 hover:bg-cyan-900/40 text-cyan-300 text-xs font-medium transition-colors"
+        >
+          ➕ Add Market Pair
+        </button>
+
         {/* Sort */}
         <div className="flex items-center gap-1 text-xs">
           <span className="text-gray-400 hidden sm:inline">Sort:</span>
@@ -682,7 +718,7 @@ function Top500Panel({
         </div>
 
         <span className="text-xs text-gray-500 ml-auto">
-          Showing {displayCoins.length} of {total} coins
+          Showing {displayCoins.length} of {total} coins{customPairs.length > 0 ? ` (+${customPairs.length} custom)` : ''}
         </span>
       </div>
 
@@ -725,7 +761,7 @@ function Top500Panel({
                       key={coin.symbol}
                       className="top500-row border-b border-gray-800/50 transition-colors"
                     >
-                      <td className="py-2.5 pl-2 text-xs text-gray-600">{coin.rank}</td>
+                      <td className="py-2.5 pl-2 text-xs text-gray-600">{coin.rank > 0 ? coin.rank : '★'}</td>
                       <td className="py-2.5">
                         <div className="flex items-center gap-2">
                           <span className="font-semibold text-white">{sym}</span>
@@ -1047,6 +1083,8 @@ export default function Dashboard() {
   const [selectedExchanges, setSelectedExchanges] = useState<SupportedExchange[]>(['binance']);
   const { coins, loading, error, lastUpdated, totalScanned, refetch } = useMarketData(selectedExchanges);
   const { items, addCoin, removeCoin, isWatching } = useWatchList();
+  const customMarketPairs = useCustomMarketPairs();
+  const [addMarketPairOpen, setAddMarketPairOpen] = useState(false);
 
   const [query, setQuery] = useState('');
   const [signalFilter, setSignalFilter] = useState<SignalFilter>('ALL');
@@ -1080,6 +1118,35 @@ export default function Dashboard() {
   const { notifications, unreadCount, pushNotifications, markAsRead, markAllAsRead } = usePortfolioNotifications();
   const primaryNavRef = useRef<HTMLDivElement | null>(null);
   const selectedExchangeLabels = selectedExchanges.map((exchange) => EXCHANGE_LABELS[exchange]).join(', ');
+  const trackedCustomSymbols = useMemo(
+    () => Array.from(new Set([...customMarketPairs.scannerSymbols, ...customMarketPairs.signalsSymbols])),
+    [customMarketPairs.scannerSymbols, customMarketPairs.signalsSymbols]
+  );
+
+  const handleAddMarketPair = useCallback(
+    (coin: CoinAnalysis, targets: { scanner: boolean; watchlist: boolean; signals: boolean }) => {
+      const alreadyTracked = customMarketPairs.hasPair(coin.symbol);
+      customMarketPairs.addPair(coin.symbol, targets);
+      if (targets.watchlist) {
+        addCoin(coin);
+      }
+
+      if (!alreadyTracked && (targets.scanner || targets.signals)) {
+        const requestSymbols = Array.from(
+          new Set([
+            ...trackedCustomSymbols,
+            ...(targets.scanner || targets.signals ? [coin.symbol] : []),
+          ])
+        );
+        void refetch(requestSymbols);
+      }
+    },
+    [addCoin, customMarketPairs, refetch, trackedCustomSymbols]
+  );
+
+  useEffect(() => {
+    void refetch(trackedCustomSymbols);
+  }, [refetch, trackedCustomSymbols]);
   const getTabLabel = useCallback(
     (tabId: DashboardTab) => {
       if (tabId === 'watchlist') return `Watchlist${items.length > 0 ? ` (${items.length})` : ''}`;
@@ -1950,7 +2017,7 @@ export default function Dashboard() {
             </div>
 
             <button
-              onClick={refetch}
+              onClick={() => void refetch(trackedCustomSymbols)}
               disabled={loading}
               className="p-1.5 rounded bg-gray-800 hover:bg-gray-700 transition-colors disabled:opacity-50"
               title="Refresh"
@@ -2200,9 +2267,23 @@ export default function Dashboard() {
               </h2>
               <span className="text-xs text-gray-500">{selectedExchangeLabels} · {TOP500_PAGE_SIZE} coins per page</span>
             </div>
-            <Top500Panel selectedExchanges={selectedExchanges} isWatching={isWatching} />
+            <Top500Panel
+              selectedExchanges={selectedExchanges}
+              isWatching={isWatching}
+              customPairs={customMarketPairs.pairs.map((pair) => pair.symbol)}
+              customCoins={coins}
+              onOpenAddMarketPair={() => setAddMarketPairOpen(true)}
+            />
           </div>
         )}
+
+        <AddMarketPairModal
+          isOpen={addMarketPairOpen}
+          selectedExchanges={selectedExchanges}
+          isFull={customMarketPairs.isFull}
+          onClose={() => setAddMarketPairOpen(false)}
+          onAddCoin={handleAddMarketPair}
+        />
 
         {/* Candlestick patterns tab */}
         {activeTab === 'patterns' && (
