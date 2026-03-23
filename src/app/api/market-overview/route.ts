@@ -38,6 +38,17 @@ interface OverviewResponse {
   scannedUniverse: number;
 }
 
+interface CoinSearchResponse {
+  timestamp: number;
+  source: SupportedExchange;
+  sources: SupportedExchange[];
+  searchedExchanges: SupportedExchange[];
+  missingExchanges: SupportedExchange[];
+  coin?: OverviewTradeRow;
+  coins?: OverviewTradeRow[];
+  error?: string;
+}
+
 type ExchangeTickerBatch = {
   exchange: SupportedExchange;
   tickers: Awaited<ReturnType<typeof getTopUSDTPairsByExchange>>;
@@ -47,6 +58,11 @@ type AnalyzedCoin = {
   key: string;
   exchange: SupportedExchange;
   coin: EnhancedCoinAnalysis;
+};
+
+type FulfilledTickerLookup = {
+  exchange: SupportedExchange;
+  ticker: Awaited<ReturnType<typeof getTickerBySymbolByExchange>>;
 };
 
 const TREND_LIST_LIMIT = 500;
@@ -110,28 +126,72 @@ export async function GET(request: Request) {
         return NextResponse.json({ error: 'Invalid symbol format' }, { status: 400 });
       }
       const symbol = symbolParam.endsWith('USDT') ? symbolParam : `${symbolParam}USDT`;
-      let source: SupportedExchange | null = null;
-      let ticker = null;
-      for (const exchange of exchanges) {
-        const found = await getTickerBySymbolByExchange(exchange, symbol);
-        if (found) {
-          source = exchange;
-          ticker = found;
-          break;
-        }
-      }
-      if (!ticker || !source) {
+      const tickerResults = await Promise.allSettled(
+        exchanges.map(async (exchange) => ({
+          exchange,
+          ticker: await getTickerBySymbolByExchange(exchange, symbol),
+        }))
+      );
+
+      const foundTickers = tickerResults
+        .filter(
+          (result): result is PromiseFulfilledResult<FulfilledTickerLookup> =>
+            result.status === 'fulfilled' && Boolean(result.value.ticker)
+        )
+        .map((result) => ({
+          exchange: result.value.exchange,
+          ticker: result.value.ticker!,
+        }));
+
+      if (foundTickers.length === 0) {
         const exchangeList = exchanges.map((exchange) => EXCHANGE_NAMES[exchange]).join(', ');
-        return NextResponse.json({ error: `Symbol not found on ${exchangeList}` }, { status: 404 });
+        const response: CoinSearchResponse = {
+          timestamp: Date.now(),
+          source: exchanges[0],
+          sources: [],
+          searchedExchanges: exchanges,
+          missingExchanges: exchanges,
+          error: `Symbol not found on ${exchangeList}`,
+        };
+        return NextResponse.json(response, { status: 404 });
       }
-      const candles = await fetchKlinesByExchange(source, symbol, 120);
-      const coin = analyzeEnhanced(ticker, candles);
-      return NextResponse.json({
+
+      const analyzedResults = await Promise.allSettled(
+        foundTickers.map(async ({ exchange, ticker }) => {
+          const candles = await fetchKlinesByExchange(exchange, symbol, 120);
+          const coin = analyzeEnhanced(ticker, candles);
+          return toOverviewRow(coin, exchange);
+        })
+      );
+
+      const coins = analyzedResults
+        .filter((result): result is PromiseFulfilledResult<OverviewTradeRow> => result.status === 'fulfilled')
+        .map((result) => result.value);
+
+      if (coins.length === 0) {
+        const response: CoinSearchResponse = {
+          timestamp: Date.now(),
+          source: foundTickers[0].exchange,
+          sources: foundTickers.map((item) => item.exchange),
+          searchedExchanges: exchanges,
+          missingExchanges: exchanges,
+          error: 'Coin data found, but analysis failed across selected exchanges',
+        };
+        return NextResponse.json(response, { status: 500 });
+      }
+
+      const sources = coins.map((item) => item.exchange);
+      const sourceSet = new Set(sources);
+      const response: CoinSearchResponse = {
         timestamp: Date.now(),
-        source,
-        sources: [source],
-        coin: toOverviewRow(coin, source),
-      });
+        source: coins[0].exchange,
+        sources,
+        searchedExchanges: exchanges,
+        missingExchanges: exchanges.filter((exchange) => !sourceSet.has(exchange)),
+        coin: coins[0],
+        coins,
+      };
+      return NextResponse.json(response);
     }
 
     const limit = TREND_LIST_LIMIT;
