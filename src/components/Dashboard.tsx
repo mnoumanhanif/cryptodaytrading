@@ -57,6 +57,11 @@ type DashboardTab =
   | 'volumewhales'
   | 'smartwatchlist'
   | 'watchlist';
+type PrimaryNavGroup = {
+  id: 'markets' | 'signals' | 'intelligence' | 'analysis' | 'portfolio';
+  label: string;
+  tabs: Array<{ id: DashboardTab; label: string }>;
+};
 const AUTO_PLAY_INTERVAL_MS = 900;
 const DEFAULT_LONG_STOP_LOSS_FACTOR = 0.985;
 const DEFAULT_LONG_TARGET_FACTOR = 1.03;
@@ -1692,20 +1697,46 @@ export default function Dashboard() {
     return { buyCount: buy, sellCount: sell, holdCount: hold };
   }, [coins]);
 
-  const TABS: { id: DashboardTab; label: string }[] = [
-    { id: 'overview', label: 'Overview' },
-    { id: 'heatmap', label: 'Heatmap' },
-    { id: 'scanner', label: 'Scanner' },
-    { id: 'top500', label: 'Top 500' },
-    { id: 'patterns', label: 'Patterns' },
-    { id: 'suggestions', label: 'Suggestions' },
-    { id: 'liquidations', label: 'Liquidations' },
-    { id: 'quicksignals', label: 'Quick Signals' },
-    { id: 'liquidationintel', label: 'Liquidation Intel' },
-    { id: 'warnings', label: 'Warnings' },
-    { id: 'volumewhales', label: 'Volume & Whales' },
-    { id: 'smartwatchlist', label: 'Smart AI Watchlist' },
-    { id: 'watchlist', label: `Watchlist${items.length > 0 ? ` (${items.length})` : ''}` },
+  const PRIMARY_NAV_GROUPS: PrimaryNavGroup[] = [
+    {
+      id: 'markets',
+      label: 'Markets',
+      tabs: [
+        { id: 'top500', label: 'Top 500' },
+        { id: 'heatmap', label: 'Heatmap' },
+        { id: 'scanner', label: 'Scanner' },
+      ],
+    },
+    {
+      id: 'signals',
+      label: 'Signals',
+      tabs: [
+        { id: 'quicksignals', label: 'Quick Signals' },
+        { id: 'suggestions', label: 'Suggestions' },
+      ],
+    },
+    {
+      id: 'intelligence',
+      label: 'Intelligence',
+      tabs: [
+        { id: 'liquidations', label: 'Liquidations' },
+        { id: 'liquidationintel', label: 'Liquidation Intel' },
+        { id: 'volumewhales', label: 'Volume & Whales' },
+      ],
+    },
+    {
+      id: 'analysis',
+      label: 'Analysis',
+      tabs: [
+        { id: 'patterns', label: 'Patterns' },
+        { id: 'warnings', label: 'Warnings' },
+      ],
+    },
+    {
+      id: 'portfolio',
+      label: 'Portfolio',
+      tabs: [{ id: 'watchlist', label: `Watchlist${items.length > 0 ? ` (${items.length})` : ''}` }],
+    },
   ];
 
   return (
@@ -1779,20 +1810,53 @@ export default function Dashboard() {
 
       {/* Tab bar */}
       <div className="max-w-7xl mx-auto px-4 pt-5">
-        <div className="flex gap-1 sm:gap-2 border-b border-gray-800 flex-wrap">
-          {TABS.map((tab) => (
-            <button
-              key={tab.id}
-              onClick={() => handleTabChange(tab.id)}
-              className={`px-3 sm:px-4 py-2 text-sm font-medium rounded-t-lg transition-colors whitespace-nowrap ${
-                activeTab === tab.id
-                  ? 'bg-gray-800 text-white border border-gray-700 border-b-gray-800 -mb-px'
-                  : 'text-gray-400 hover:text-gray-200 hover:bg-gray-800/50'
-              }`}
-            >
-              {tab.label}
-            </button>
-          ))}
+        <div className="flex gap-2 border-b border-gray-800 flex-wrap items-end">
+          <button
+            onClick={() => handleTabChange('overview')}
+            className={`px-3 sm:px-4 py-2 text-sm font-medium rounded-t-lg transition-colors whitespace-nowrap ${
+              activeTab === 'overview'
+                ? 'bg-gray-800 text-white border border-gray-700 border-b-gray-800 -mb-px'
+                : 'text-gray-400 hover:text-gray-200 hover:bg-gray-800/50'
+            }`}
+          >
+            Overview
+          </button>
+
+          {PRIMARY_NAV_GROUPS.map((group) => {
+            const isGroupActive = group.tabs.some((tab) => tab.id === activeTab);
+            return (
+              <details key={group.id} className="relative group">
+                <summary
+                  className={`list-none px-3 sm:px-4 py-2 text-sm font-medium rounded-t-lg transition-colors whitespace-nowrap cursor-pointer select-none flex items-center gap-1 ${
+                    isGroupActive
+                      ? 'bg-gray-800 text-white border border-gray-700 border-b-gray-800 -mb-px'
+                      : 'text-gray-400 hover:text-gray-200 hover:bg-gray-800/50'
+                  }`}
+                >
+                  <span>{group.label}</span>
+                  <span className="text-xs">▼</span>
+                </summary>
+                <div className="absolute left-0 top-full mt-1 min-w-[180px] rounded-lg border border-gray-800 bg-gray-900 shadow-xl z-30 p-1 hidden group-hover:block group-focus-within:block">
+                  {group.tabs.map((tab) => (
+                    <button
+                      key={tab.id}
+                      onClick={(event) => {
+                        handleTabChange(tab.id);
+                        event.currentTarget.closest('details')?.removeAttribute('open');
+                      }}
+                      className={`w-full text-left px-3 py-2 text-sm rounded-md transition-colors ${
+                        activeTab === tab.id
+                          ? 'bg-gray-800 text-white'
+                          : 'text-gray-300 hover:bg-gray-800/70 hover:text-white'
+                      }`}
+                    >
+                      {tab.label}
+                    </button>
+                  ))}
+                </div>
+              </details>
+            );
+          })}
         </div>
       </div>
 
