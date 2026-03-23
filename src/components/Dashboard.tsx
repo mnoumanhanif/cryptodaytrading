@@ -112,6 +112,7 @@ const PATTERN_STRUCTURE_STRENGTH_THRESHOLD = 1.5;
 const SCANNER_PAGE_SIZE = 200;
 const DEFAULT_TOTAL_SCANNED = 1000;
 const TOP500_PAGE_SIZE = 500;
+const CUSTOM_PAIR_RANK = 0;
 
 const UI_HEADING_CLASS = 'text-[20px] font-bold';
 const UI_SECTION_TITLE_CLASS = 'text-[17px] font-semibold';
@@ -653,7 +654,7 @@ function Top500Panel({
           volume24h: coin.volume24h,
           high24h: coin.high24h,
           low24h: coin.low24h,
-          rank: 0,
+          rank: CUSTOM_PAIR_RANK,
         }));
       const regularRows = filtered.filter((coin) => !customSet.has(coin.symbol));
       filtered = [...customRowsFromTop, ...missingCustomRows, ...regularRows];
@@ -761,7 +762,12 @@ function Top500Panel({
                       key={coin.symbol}
                       className="top500-row border-b border-gray-800/50 transition-colors"
                     >
-                      <td className="py-2.5 pl-2 text-xs text-gray-600">{coin.rank > 0 ? coin.rank : '★'}</td>
+                      <td
+                        className="py-2.5 pl-2 text-xs text-gray-600"
+                        title={coin.rank === CUSTOM_PAIR_RANK ? 'Custom market pair' : undefined}
+                      >
+                        {coin.rank > CUSTOM_PAIR_RANK ? coin.rank : '★'}
+                      </td>
                       <td className="py-2.5">
                         <div className="flex items-center gap-2">
                           <span className="font-semibold text-white">{sym}</span>
@@ -1135,7 +1141,7 @@ export default function Dashboard() {
         const requestSymbols = Array.from(
           new Set([
             ...trackedCustomSymbols,
-            ...(targets.scanner || targets.signals ? [coin.symbol] : []),
+            ...[coin.symbol],
           ])
         );
         void refetch(requestSymbols);

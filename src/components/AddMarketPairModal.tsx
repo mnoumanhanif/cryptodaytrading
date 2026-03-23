@@ -18,6 +18,9 @@ interface AddMarketPairModalProps {
   onAddCoin: (coin: CoinAnalysis, targets: AddTargets) => void;
 }
 
+const PRICE_DECIMALS_ABOVE_ONE = 2;
+const PRICE_DECIMALS_BELOW_ONE = 6;
+
 function getCoinTag(coin: CoinAnalysis): string | null {
   if (coin.volume24h >= 1_000_000_000) return '🔥 High Volume';
   if (Math.abs(coin.priceChangePercent) >= 8) return '⚡ Trending';
@@ -115,13 +118,18 @@ export default function AddMarketPairModal({
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-40 bg-black/60 flex items-center justify-center p-4" onClick={onClose} role="presentation">
+    <div className="fixed inset-0 z-40 bg-black/60 flex items-center justify-center p-4" onClick={onClose}>
       <div
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="add-market-pair-title"
         className="w-full max-w-2xl max-h-[90vh] overflow-hidden rounded-xl border border-gray-700 bg-gray-900 shadow-2xl"
         onClick={(event) => event.stopPropagation()}
       >
         <div className="px-4 py-3 border-b border-gray-800 flex items-center justify-between">
-          <h3 className="text-lg font-semibold text-white">🔍 Add Market Pair</h3>
+          <h3 id="add-market-pair-title" className="text-lg font-semibold text-white">
+            🔍 Add Market Pair
+          </h3>
           <button
             type="button"
             onClick={onClose}
@@ -192,7 +200,7 @@ export default function AddMarketPairModal({
                       )}
                     </div>
                     <p className="text-xs text-gray-400 mt-1">
-                      ${coin.price.toFixed(coin.price >= 1 ? 2 : 6)} · Vol {Math.round(coin.volume24h).toLocaleString()} · {coin.signal}
+                      ${coin.price.toFixed(coin.price >= 1 ? PRICE_DECIMALS_ABOVE_ONE : PRICE_DECIMALS_BELOW_ONE)} · Vol {Math.round(coin.volume24h).toLocaleString()} · {coin.signal}
                     </p>
                   </button>
                 );
@@ -254,4 +262,3 @@ export default function AddMarketPairModal({
     </div>
   );
 }
-
