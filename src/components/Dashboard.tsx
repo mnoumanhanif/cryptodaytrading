@@ -60,7 +60,7 @@ type DashboardTab =
 type PrimaryNavGroup = {
   id: 'markets' | 'signals' | 'intelligence' | 'analysis' | 'portfolio';
   label: string;
-  tabs: Array<{ id: DashboardTab; label: string }>;
+  tabIds: DashboardTab[];
 };
 const AUTO_PLAY_INTERVAL_MS = 900;
 const DEFAULT_LONG_STOP_LOSS_FACTOR = 0.985;
@@ -107,6 +107,33 @@ const UI_HEADING_CLASS = 'text-[20px] font-bold';
 const UI_SECTION_TITLE_CLASS = 'text-[17px] font-semibold';
 const UI_DATA_TEXT_CLASS = 'text-sm';
 const UI_SMALL_LABEL_CLASS = 'text-[11px]';
+const PRIMARY_NAV_GROUPS: PrimaryNavGroup[] = [
+  {
+    id: 'markets',
+    label: 'Markets',
+    tabIds: ['top500', 'heatmap', 'scanner'],
+  },
+  {
+    id: 'signals',
+    label: 'Signals',
+    tabIds: ['quicksignals', 'suggestions'],
+  },
+  {
+    id: 'intelligence',
+    label: 'Intelligence',
+    tabIds: ['liquidations', 'liquidationintel', 'volumewhales'],
+  },
+  {
+    id: 'analysis',
+    label: 'Analysis',
+    tabIds: ['patterns', 'warnings'],
+  },
+  {
+    id: 'portfolio',
+    label: 'Portfolio',
+    tabIds: ['watchlist'],
+  },
+];
 
 type CandlePattern = {
   name: string;
@@ -1037,6 +1064,7 @@ export default function Dashboard() {
   const [signalFilter, setSignalFilter] = useState<SignalFilter>('ALL');
   const [sortBy, setSortBy] = useState<SortField>('score');
   const [activeTab, setActiveTab] = useState<DashboardTab>('overview');
+  const [openPrimaryNav, setOpenPrimaryNav] = useState<PrimaryNavGroup['id'] | null>(null);
   const [quickSignalTimeframe, setQuickSignalTimeframe] = useState<QuickSignalTimeframe>('15m');
   const [quickSignalSort, setQuickSignalSort] = useState<QuickSignalSort>('confidence');
   const [quickSignalConfidenceOnly70, setQuickSignalConfidenceOnly70] = useState(true);
@@ -1056,7 +1084,25 @@ export default function Dashboard() {
   const [signalAlerts, setSignalAlerts] = useState<QuickSignalAlert[]>([]);
   const [signalChanges, setSignalChanges] = useState<Array<{ symbol: string; change: SignalChangeDirection; confidence: number }>>([]);
   const previousSignalStateRef = useRef<Record<string, { bias: QuickSignalBias; confidence: number }>>({});
+  const primaryNavRef = useRef<HTMLDivElement | null>(null);
   const selectedExchangeLabels = selectedExchanges.map((exchange) => EXCHANGE_LABELS[exchange]).join(', ');
+  const getTabLabel = useCallback(
+    (tabId: DashboardTab) => {
+      if (tabId === 'watchlist') return `Watchlist${items.length > 0 ? ` (${items.length})` : ''}`;
+      if (tabId === 'top500') return 'Top 500';
+      if (tabId === 'quicksignals') return 'Quick Signals';
+      if (tabId === 'liquidationintel') return 'Liquidation Intel';
+      if (tabId === 'volumewhales') return 'Volume & Whales';
+      if (tabId === 'liquidations') return 'Liquidations';
+      if (tabId === 'suggestions') return 'Suggestions';
+      if (tabId === 'heatmap') return 'Heatmap';
+      if (tabId === 'scanner') return 'Scanner';
+      if (tabId === 'patterns') return 'Patterns';
+      if (tabId === 'warnings') return 'Warnings';
+      return tabId;
+    },
+    [items.length]
+  );
 
   const suggestionData = useMemo(() => {
     const ranked = [...coins].sort((a, b) => b.score - a.score);
@@ -1173,11 +1219,35 @@ export default function Dashboard() {
 
   const handleTabChange = (tab: DashboardTab) => {
     setActiveTab(tab);
+    setOpenPrimaryNav(null);
     const params = new URLSearchParams(window.location.search);
     params.set('tab', tab);
     if (tab !== 'top500') params.delete('page');
     window.history.pushState({}, '', `?${params.toString()}`);
   };
+
+  useEffect(() => {
+    const handleDocumentClick = (event: MouseEvent) => {
+      if (!primaryNavRef.current) return;
+      if (!primaryNavRef.current.contains(event.target as Node)) {
+        setOpenPrimaryNav(null);
+      }
+    };
+
+    const handleEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        setOpenPrimaryNav(null);
+      }
+    };
+
+    document.addEventListener('mousedown', handleDocumentClick);
+    document.addEventListener('keydown', handleEscape);
+
+    return () => {
+      document.removeEventListener('mousedown', handleDocumentClick);
+      document.removeEventListener('keydown', handleEscape);
+    };
+  }, []);
 
   const handleSearch = (q: string) => {
     searchCoins(q, selectedExchanges);
@@ -1697,48 +1767,6 @@ export default function Dashboard() {
     return { buyCount: buy, sellCount: sell, holdCount: hold };
   }, [coins]);
 
-  const PRIMARY_NAV_GROUPS: PrimaryNavGroup[] = [
-    {
-      id: 'markets',
-      label: 'Markets',
-      tabs: [
-        { id: 'top500', label: 'Top 500' },
-        { id: 'heatmap', label: 'Heatmap' },
-        { id: 'scanner', label: 'Scanner' },
-      ],
-    },
-    {
-      id: 'signals',
-      label: 'Signals',
-      tabs: [
-        { id: 'quicksignals', label: 'Quick Signals' },
-        { id: 'suggestions', label: 'Suggestions' },
-      ],
-    },
-    {
-      id: 'intelligence',
-      label: 'Intelligence',
-      tabs: [
-        { id: 'liquidations', label: 'Liquidations' },
-        { id: 'liquidationintel', label: 'Liquidation Intel' },
-        { id: 'volumewhales', label: 'Volume & Whales' },
-      ],
-    },
-    {
-      id: 'analysis',
-      label: 'Analysis',
-      tabs: [
-        { id: 'patterns', label: 'Patterns' },
-        { id: 'warnings', label: 'Warnings' },
-      ],
-    },
-    {
-      id: 'portfolio',
-      label: 'Portfolio',
-      tabs: [{ id: 'watchlist', label: `Watchlist${items.length > 0 ? ` (${items.length})` : ''}` }],
-    },
-  ];
-
   return (
     <div className="min-h-screen bg-gray-950 text-white">
       {/* Top bar */}
@@ -1809,7 +1837,7 @@ export default function Dashboard() {
       )}
 
       {/* Tab bar */}
-      <div className="max-w-7xl mx-auto px-4 pt-5">
+      <div ref={primaryNavRef} className="max-w-7xl mx-auto px-4 pt-5">
         <div className="flex gap-2 border-b border-gray-800 flex-wrap items-end">
           <button
             onClick={() => handleTabChange('overview')}
@@ -1823,10 +1851,20 @@ export default function Dashboard() {
           </button>
 
           {PRIMARY_NAV_GROUPS.map((group) => {
-            const isGroupActive = group.tabs.some((tab) => tab.id === activeTab);
+            const isGroupActive = group.tabIds.some((tabId) => tabId === activeTab);
+            const isOpen = openPrimaryNav === group.id;
             return (
-              <details key={group.id} className="relative group">
-                <summary
+              <div key={group.id} className="relative">
+                <button
+                  type="button"
+                  aria-label={`Open ${group.label} menu`}
+                  aria-haspopup="menu"
+                  aria-expanded={isOpen}
+                  aria-controls={`nav-menu-${group.id}`}
+                  onClick={() => setOpenPrimaryNav((current) => (current === group.id ? null : group.id))}
+                  onKeyDown={(event) => {
+                    if (event.key === 'Escape') setOpenPrimaryNav(null);
+                  }}
                   className={`list-none px-3 sm:px-4 py-2 text-sm font-medium rounded-t-lg transition-colors whitespace-nowrap cursor-pointer select-none flex items-center gap-1 ${
                     isGroupActive
                       ? 'bg-gray-800 text-white border border-gray-700 border-b-gray-800 -mb-px'
@@ -1835,26 +1873,34 @@ export default function Dashboard() {
                 >
                   <span>{group.label}</span>
                   <span className="text-xs">▼</span>
-                </summary>
-                <div className="absolute left-0 top-full mt-1 min-w-[180px] rounded-lg border border-gray-800 bg-gray-900 shadow-xl z-30 p-1 hidden group-hover:block group-focus-within:block">
-                  {group.tabs.map((tab) => (
+                </button>
+                <div
+                  id={`nav-menu-${group.id}`}
+                  role="menu"
+                  aria-hidden={!isOpen}
+                  className={`absolute left-0 top-full mt-1 min-w-[180px] rounded-lg border border-gray-800 bg-gray-900 shadow-xl z-30 p-1 ${
+                    isOpen ? 'block' : 'hidden'
+                  }`}
+                >
+                  {group.tabIds.map((tabId) => (
                     <button
-                      key={tab.id}
-                      onClick={(event) => {
-                        handleTabChange(tab.id);
-                        event.currentTarget.closest('details')?.removeAttribute('open');
+                      key={tabId}
+                      type="button"
+                      role="menuitem"
+                      onClick={() => {
+                        handleTabChange(tabId);
                       }}
                       className={`w-full text-left px-3 py-2 text-sm rounded-md transition-colors ${
-                        activeTab === tab.id
+                        activeTab === tabId
                           ? 'bg-gray-800 text-white'
                           : 'text-gray-300 hover:bg-gray-800/70 hover:text-white'
                       }`}
                     >
-                      {tab.label}
+                      {getTabLabel(tabId)}
                     </button>
                   ))}
                 </div>
-              </details>
+              </div>
             );
           })}
         </div>
