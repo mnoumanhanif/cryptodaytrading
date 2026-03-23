@@ -66,6 +66,30 @@ const LIQUIDATION_INTENSITY_VOLUME_WEIGHT = 25;
 const LIQUIDATION_INTENSITY_VOLATILITY_WEIGHT = 3;
 const SMART_WATCHLIST_VOLATILITY_MULTIPLIER = 8;
 const SMART_WATCHLIST_LIQUIDITY_MULTIPLIER = 35;
+const SHORT_TERM_LONG_STOP_LOSS_FACTOR = 0.985;
+const SHORT_TERM_SHORT_STOP_LOSS_FACTOR = 1.015;
+const SHORT_TERM_LONG_TARGET_FACTOR = 1.02;
+const SHORT_TERM_SHORT_TARGET_FACTOR = 0.98;
+const TRADE_CONFIDENCE_SIGNAL_WEIGHT = 0.65;
+const TRADE_CONFIDENCE_INDICATOR_WEIGHT = 0.35;
+const MAX_TRADE_CONFIDENCE = 99;
+const MAX_SIGNAL_FLIP_ITEMS = 8;
+const MIN_VOLUME_BY_TIMEFRAME: Record<'5m' | '15m' | '1h' | '4h', number> = {
+  '5m': 1.05,
+  '15m': 1.15,
+  '1h': 1.3,
+  '4h': 1.5,
+};
+const CONFIDENCE_THRESHOLD_STRONG = 85;
+const CONFIDENCE_THRESHOLD_GOOD = 70;
+const CONFIDENCE_THRESHOLD_RISKY = 50;
+const MIN_CONFIDENCE_FILTER_THRESHOLD = 70;
+const HIGH_VOLUME_FILTER_THRESHOLD = 1.8;
+const INDICATOR_RSI_WEIGHT = 0.3;
+const INDICATOR_VOLUME_WEIGHT = 0.25;
+const INDICATOR_MA_WEIGHT = 0.25;
+const INDICATOR_MACD_WEIGHT = 0.2;
+const MAX_JOURNAL_DISPLAY_ITEMS = 100;
 
 type CandlePattern = {
   name: string;
@@ -1156,15 +1180,15 @@ export default function Dashboard() {
   const [lastSignalBiasBySymbol, setLastSignalBiasBySymbol] = useState<Record<string, 'LONG' | 'SHORT' | 'HOLD'>>({});
 
   const scoreBandFromConfidence = (confidence: number): SignalBand => {
-    if (confidence >= 85) return 'STRONG';
-    if (confidence >= 70) return 'GOOD';
-    if (confidence >= 50) return 'RISKY';
+    if (confidence >= CONFIDENCE_THRESHOLD_STRONG) return 'STRONG';
+    if (confidence >= CONFIDENCE_THRESHOLD_GOOD) return 'GOOD';
+    if (confidence >= CONFIDENCE_THRESHOLD_RISKY) return 'RISKY';
     return 'AVOID';
   };
 
   const strengthFromConfidence = (confidence: number): SignalStrength => {
-    if (confidence >= 85) return 'STRONG';
-    if (confidence >= 70) return 'MEDIUM';
+    if (confidence >= CONFIDENCE_THRESHOLD_STRONG) return 'STRONG';
+    if (confidence >= CONFIDENCE_THRESHOLD_GOOD) return 'MEDIUM';
     return 'WEAK';
   };
 
@@ -1172,17 +1196,30 @@ export default function Dashboard() {
     return coins.map((coin) => {
       const longBias = coin.tradeSignal.prediction === 'UP' || (coin.indicators.rsi.value < 30 && coin.indicators.ma.trend !== 'bearish');
       const shortBias = coin.tradeSignal.prediction === 'DOWN' || (coin.indicators.rsi.value > 70 && coin.indicators.ma.trend !== 'bullish');
-      const bias: 'LONG' | 'SHORT' = shortBias && !longBias ? 'SHORT' : 'LONG';
+      const bias: 'LONG' | 'SHORT' =
+        longBias && shortBias
+          ? coin.tradeSignal.prediction === 'DOWN' || coin.indicators.ma.trend === 'bearish'
+            ? 'SHORT'
+            : 'LONG'
+          : shortBias
+            ? 'SHORT'
+            : 'LONG';
       const entry = coin.risk.entryPrice;
-      const stopLoss = bias === 'LONG' ? Math.min(coin.risk.stopLoss, entry * 0.985) : Math.max(coin.risk.stopLoss, entry * 1.015);
-      const takeProfit = bias === 'LONG' ? Math.max(coin.risk.targetPrice, entry * 1.02) : Math.min(coin.risk.targetPrice, entry * 0.98);
+      const stopLoss =
+        bias === 'LONG'
+          ? Math.min(coin.risk.stopLoss, entry * SHORT_TERM_LONG_STOP_LOSS_FACTOR)
+          : Math.max(coin.risk.stopLoss, entry * SHORT_TERM_SHORT_STOP_LOSS_FACTOR);
+      const takeProfit =
+        bias === 'LONG'
+          ? Math.max(coin.risk.targetPrice, entry * SHORT_TERM_LONG_TARGET_FACTOR)
+          : Math.min(coin.risk.targetPrice, entry * SHORT_TERM_SHORT_TARGET_FACTOR);
       const indicatorScore = Math.round((
-        coin.indicators.rsi.score * 0.3 +
-        coin.indicators.volume.score * 0.25 +
-        coin.indicators.ma.score * 0.25 +
-        coin.indicators.macd.score * 0.2
+        coin.indicators.rsi.score * INDICATOR_RSI_WEIGHT +
+        coin.indicators.volume.score * INDICATOR_VOLUME_WEIGHT +
+        coin.indicators.ma.score * INDICATOR_MA_WEIGHT +
+        coin.indicators.macd.score * INDICATOR_MACD_WEIGHT
       ) * 100) / 100;
-      const confidence = Math.round(Math.max(0, Math.min(99, (coin.tradeSignal.confidence * 0.65) + (indicatorScore * 0.35))));
+      const confidence = Math.round(Math.max(0, Math.min(MAX_TRADE_CONFIDENCE, (coin.tradeSignal.confidence * TRADE_CONFIDENCE_SIGNAL_WEIGHT) + (indicatorScore * TRADE_CONFIDENCE_INDICATOR_WEIGHT))));
 
       return {
         symbol: coin.symbol,
@@ -1202,11 +1239,10 @@ export default function Dashboard() {
   }, [coins]);
 
   const filteredSignals = useMemo(() => {
-    const minVolByTimeframe: Record<'5m' | '15m' | '1h' | '4h', number> = { '5m': 1.05, '15m': 1.15, '1h': 1.3, '4h': 1.5 };
-    const minVol = minVolByTimeframe[signalTimeframe];
+    const minVol = MIN_VOLUME_BY_TIMEFRAME[signalTimeframe];
     let rows = shortTermSignals.filter((row) => row.volumeRatio >= minVol);
-    if (minConfidence70Only) rows = rows.filter((row) => row.confidence >= 70);
-    if (highVolumeOnly) rows = rows.filter((row) => row.volumeRatio >= 1.8);
+    if (minConfidence70Only) rows = rows.filter((row) => row.confidence >= MIN_CONFIDENCE_FILTER_THRESHOLD);
+    if (highVolumeOnly) rows = rows.filter((row) => row.volumeRatio >= HIGH_VOLUME_FILTER_THRESHOLD);
 
     const sorted = [...rows].sort((a, b) => {
       if (signalSortBy === 'volume') return b.volumeRatio - a.volumeRatio;
@@ -1227,14 +1263,20 @@ export default function Dashboard() {
         flips.push({ symbol: row.symbol, from: prev as 'LONG' | 'SHORT', to: row.bias });
       }
     }
-    return flips.slice(0, 8);
+    return flips.slice(0, MAX_SIGNAL_FLIP_ITEMS);
   }, [filteredSignals, lastSignalBiasBySymbol]);
 
   useEffect(() => {
     setLastSignalBiasBySymbol((prev) => {
+      let changed = false;
       const next = { ...prev };
-      for (const row of filteredSignals) next[row.symbol] = row.bias;
-      return next;
+      for (const row of filteredSignals) {
+        if (next[row.symbol] !== row.bias) {
+          next[row.symbol] = row.bias;
+          changed = true;
+        }
+      }
+      return changed ? next : prev;
     });
   }, [filteredSignals]);
 
@@ -1251,6 +1293,8 @@ export default function Dashboard() {
 
   const [journalData, setJournalData] = useState<{ entries: Array<{ id: string; symbol: string; signal: string; confidence: number; netRR: number; outcome: string; createdAt: number }>; stats?: { totalSignals: number; buySignals: number; sellSignals: number; winRate: number; pendingOutcomes: number } } | null>(null);
   const [journalLoading, setJournalLoading] = useState(false);
+
+  const journalRows = useMemo(() => (journalData?.entries ?? []).slice(-MAX_JOURNAL_DISPLAY_ITEMS).reverse(), [journalData?.entries]);
 
   useEffect(() => {
     if (activeTab !== 'journal') return;
@@ -1644,7 +1688,7 @@ export default function Dashboard() {
                       </tr>
                     </thead>
                     <tbody>
-                      {(journalData.entries ?? []).slice().reverse().slice(0, 100).map((entry) => (
+                      {journalRows.map((entry) => (
                         <tr key={entry.id} className="border-b border-gray-800/50">
                           <td className="py-2 px-3 text-gray-200">{entry.symbol.replace('USDT', '')}</td>
                           <td className={`py-2 px-3 text-right font-semibold ${entry.signal === 'BUY' ? 'text-green-400' : entry.signal === 'SELL' ? 'text-red-400' : 'text-yellow-400'}`}>
