@@ -31,3 +31,34 @@ body {
 ::-webkit-scrollbar-thumb:hover {
   background: #4b5563;
 }
+
+.marquee {
+  overflow: hidden;
+  white-space: nowrap;
+  padding: 8px 0;
+}
+
+.marquee-track {
+  display: inline-block;
+  min-width: 200%;
+  animation: marquee-scroll 25s linear infinite;
+}
+
+.marquee-track span {
+  margin: 0 20px;
+  font-weight: 500;
+  display: inline-block;
+}
+
+.marquee-segment {
+  color: #e5e7eb;
+}
+
+@keyframes marquee-scroll {
+  from {
+    transform: translateX(0);
+  }
+  to {
+    transform: translateX(-50%);
+  }
+}

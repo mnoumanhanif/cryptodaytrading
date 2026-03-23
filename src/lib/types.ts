@@ -202,6 +202,22 @@ export interface WatchListItem {
   stopLoss: number;
 }
 
+export type PortfolioNotificationType = 'LONG' | 'SHORT' | 'RISK' | 'SQUEEZE';
+export type PortfolioNotificationPriority = 'HIGH' | 'MEDIUM';
+export type PortfolioNotificationFilter = 'ALL' | PortfolioNotificationType;
+
+export interface PortfolioNotification {
+  id: string;
+  symbol: string;
+  type: PortfolioNotificationType;
+  priority: PortfolioNotificationPriority;
+  confidence?: number;
+  message: string;
+  reason: string;
+  createdAt: number;
+  read: boolean;
+}
+
 /** Short-term risk targets for 1-2 hour trading */
 export interface ShortTermRisk {
   entryPrice: number;
