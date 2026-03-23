@@ -99,6 +99,30 @@ export default function MarketOverviewPanel({ selectedExchanges }: MarketOvervie
       setSearching(true);
       setError(null);
       const symbol = raw.endsWith('USDT') ? raw : `${raw}USDT`;
+
+      // First, check if the symbol exists in the already-loaded overview data
+      if (overview) {
+        const allCoins = [...(overview.uptrend ?? []), ...(overview.downtrend ?? [])];
+        const localMatches = allCoins.filter(
+          (coin) => coin.symbol === symbol || coin.symbol.startsWith(raw)
+        );
+
+        if (localMatches.length > 0) {
+          // Exact matches first, then partial matches
+          const exactMatches = localMatches.filter((coin) => coin.symbol === symbol);
+          const matches = exactMatches.length > 0 ? exactMatches : localMatches;
+          const sortedCoins = [...matches].sort((a, b) => a.exchange.localeCompare(b.exchange));
+          const foundNames = sortedCoins.map((coin) => EXCHANGE_LABELS[coin.exchange]);
+          
+          setSearchResults(sortedCoins);
+          setSearchResult(sortedCoins[0]);
+          setSearchStatus(`${sortedCoins[0].symbol} found on ${foundNames.join(', ')} (from cached data).`);
+          setSearching(false);
+          return;
+        }
+      }
+
+      // If not found locally, fall back to API search
       try {
         const res = await fetch(
           `/api/market-overview?exchanges=${encodeURIComponent(selectedExchangeParam)}&symbol=${encodeURIComponent(symbol)}`,
@@ -134,7 +158,7 @@ export default function MarketOverviewPanel({ selectedExchanges }: MarketOvervie
         setSearching(false);
       }
     },
-    [selectedExchangeParam, selectedExchanges]
+    [selectedExchangeParam, selectedExchanges, overview]
   );
 
   useEffect(() => {
@@ -200,7 +224,7 @@ export default function MarketOverviewPanel({ selectedExchanges }: MarketOvervie
         onSubmit={handleSearch}
         className="bg-gray-900 border border-gray-800 rounded-lg p-3 flex flex-col sm:flex-row gap-2 sm:items-center"
       >
-        <p className="text-xs text-gray-400 sm:w-60">Filter current market results</p>
+        <p className="text-xs text-gray-400 sm:w-60">Search coins (searches cached data first)</p>
         <input
           type="text"
           value={searchSymbol}
