@@ -227,71 +227,118 @@ export async function getTickerBySymbolByExchange(
 ): Promise<BinanceTicker | null> {
   switch (exchange) {
     case 'bybit': {
-      const data = await fetchJson<BybitTickerResponse>(
-        `https://api.bybit.com/v5/market/tickers?category=linear&symbol=${encodeURIComponent(symbol)}`,
-        BYBIT_KEY ? { 'X-BAPI-API-KEY': BYBIT_KEY } : undefined
-      );
-      const ticker = data.result?.list?.find((item) => item.symbol === symbol);
-      if (!ticker) return null;
-      const lastPrice = parseFloat(ticker.lastPrice);
-      const pct = normalizePercent(parseFloat(ticker.price24hPcnt));
-      const priceChange = calculatePriceChangeFromPercent(lastPrice, pct);
-      const openPrice = calculateOpenPriceFromPercent(lastPrice, pct);
-      return {
-        symbol: ticker.symbol,
-        priceChange: String(priceChange),
-        priceChangePercent: String(pct),
-        weightedAvgPrice: ticker.lastPrice,
-        lastPrice: ticker.lastPrice,
-        volume: ticker.turnover24h,
-        quoteVolume: ticker.turnover24h,
-        openPrice: String(openPrice),
-        highPrice: ticker.highPrice24h,
-        lowPrice: ticker.lowPrice24h,
-        count: 0,
-      };
+      // Try linear (futures) first, then spot if not found
+      try {
+        const linearData = await fetchJson<BybitTickerResponse>(
+          `https://api.bybit.com/v5/market/tickers?category=linear&symbol=${encodeURIComponent(symbol)}`,
+          BYBIT_KEY ? { 'X-BAPI-API-KEY': BYBIT_KEY } : undefined
+        );
+        const linearTicker = linearData.result?.list?.find((item) => item.symbol === symbol);
+        if (linearTicker) {
+          const lastPrice = parseFloat(linearTicker.lastPrice);
+          const pct = normalizePercent(parseFloat(linearTicker.price24hPcnt));
+          const priceChange = calculatePriceChangeFromPercent(lastPrice, pct);
+          const openPrice = calculateOpenPriceFromPercent(lastPrice, pct);
+          return {
+            symbol: linearTicker.symbol,
+            priceChange: String(priceChange),
+            priceChangePercent: String(pct),
+            weightedAvgPrice: linearTicker.lastPrice,
+            lastPrice: linearTicker.lastPrice,
+            volume: linearTicker.turnover24h,
+            quoteVolume: linearTicker.turnover24h,
+            openPrice: String(openPrice),
+            highPrice: linearTicker.highPrice24h,
+            lowPrice: linearTicker.lowPrice24h,
+            count: 0,
+          };
+        }
+      } catch {
+        // Linear market failed, try spot
+      }
+
+      // Try spot market
+      try {
+        const spotData = await fetchJson<BybitTickerResponse>(
+          `https://api.bybit.com/v5/market/tickers?category=spot&symbol=${encodeURIComponent(symbol)}`,
+          BYBIT_KEY ? { 'X-BAPI-API-KEY': BYBIT_KEY } : undefined
+        );
+        const spotTicker = spotData.result?.list?.find((item) => item.symbol === symbol);
+        if (spotTicker) {
+          const lastPrice = parseFloat(spotTicker.lastPrice);
+          const pct = normalizePercent(parseFloat(spotTicker.price24hPcnt));
+          const priceChange = calculatePriceChangeFromPercent(lastPrice, pct);
+          const openPrice = calculateOpenPriceFromPercent(lastPrice, pct);
+          return {
+            symbol: spotTicker.symbol,
+            priceChange: String(priceChange),
+            priceChangePercent: String(pct),
+            weightedAvgPrice: spotTicker.lastPrice,
+            lastPrice: spotTicker.lastPrice,
+            volume: spotTicker.turnover24h,
+            quoteVolume: spotTicker.turnover24h,
+            openPrice: String(openPrice),
+            highPrice: spotTicker.highPrice24h,
+            lowPrice: spotTicker.lowPrice24h,
+            count: 0,
+          };
+        }
+      } catch {
+        // Spot market also failed
+      }
+
+      return null;
     }
     case 'bitget': {
-      const data = await fetchJson<{
-        data?: {
-          symbol: string;
-          lastPr: string;
-          change24h: string;
-          usdtVol?: string;
-          quoteVol?: string;
-          high24h: string;
-          low24h: string;
+      try {
+        const data = await fetchJson<{
+          code?: string;
+          data?: {
+            symbol: string;
+            lastPr: string;
+            change24h: string;
+            usdtVol?: string;
+            quoteVol?: string;
+            high24h: string;
+            low24h: string;
+          };
+        }>(
+          `https://api.bitget.com/api/v2/spot/market/ticker?symbol=${encodeURIComponent(symbol)}`,
+          BITGET_KEY ? { 'ACCESS-KEY': BITGET_KEY } : undefined
+        );
+        const ticker = data.data;
+        if (!ticker || ticker.symbol !== symbol) return null;
+        const pct = normalizePercent(parseFloat(ticker.change24h));
+        const lastPrice = parseFloat(ticker.lastPr);
+        const priceChange = calculatePriceChangeFromPercent(lastPrice, pct);
+        const openPrice = calculateOpenPriceFromPercent(lastPrice, pct);
+        const quoteVolume = ticker.usdtVol ?? ticker.quoteVol ?? '0';
+        return {
+          symbol: ticker.symbol,
+          priceChange: String(priceChange),
+          priceChangePercent: String(pct),
+          weightedAvgPrice: ticker.lastPr,
+          lastPrice: ticker.lastPr,
+          volume: quoteVolume,
+          quoteVolume,
+          openPrice: String(openPrice),
+          highPrice: ticker.high24h,
+          lowPrice: ticker.low24h,
+          count: 0,
         };
-      }>(
-        `https://api.bitget.com/api/v2/spot/market/ticker?symbol=${encodeURIComponent(symbol)}`,
-        BITGET_KEY ? { 'ACCESS-KEY': BITGET_KEY } : undefined
-      );
-      const ticker = data.data;
-      if (!ticker || ticker.symbol !== symbol) return null;
-      const pct = normalizePercent(parseFloat(ticker.change24h));
-      const lastPrice = parseFloat(ticker.lastPr);
-      const priceChange = calculatePriceChangeFromPercent(lastPrice, pct);
-      const openPrice = calculateOpenPriceFromPercent(lastPrice, pct);
-      const quoteVolume = ticker.usdtVol ?? ticker.quoteVol ?? '0';
-      return {
-        symbol: ticker.symbol,
-        priceChange: String(priceChange),
-        priceChangePercent: String(pct),
-        weightedAvgPrice: ticker.lastPr,
-        lastPrice: ticker.lastPr,
-        volume: quoteVolume,
-        quoteVolume,
-        openPrice: String(openPrice),
-        highPrice: ticker.high24h,
-        lowPrice: ticker.low24h,
-        count: 0,
-      };
+      } catch {
+        return null;
+      }
     }
     case 'binance':
     default: {
-      const { fetch24hTickers } = await import('./binance');
-      const tickers = await fetch24hTickers(symbol);
-      return tickers[0] ?? null;
+      try {
+        const { fetch24hTickers } = await import('./binance');
+        const tickers = await fetch24hTickers(symbol);
+        return tickers[0] ?? null;
+      } catch {
+        return null;
+      }
     }
   }
 }
