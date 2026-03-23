@@ -2,8 +2,10 @@
 
 // ============================================================
 // Coin filter bar – local search, sort, signal filter
+// Supports expanded API search for coins not in local list
 // ============================================================
 
+import { useState, useEffect, useCallback } from 'react';
 import { SignalFilter, SortField } from '@/hooks/useCoinSearch';
 
 interface Props {
@@ -13,6 +15,11 @@ interface Props {
   onSignalFilterChange: (f: SignalFilter) => void;
   sortBy: SortField;
   onSortChange: (s: SortField) => void;
+  // Expanded search props
+  onApiSearch?: (query: string) => void;
+  apiSearching?: boolean;
+  apiResultCount?: number;
+  localResultCount?: number;
 }
 
 const SIGNALS: SignalFilter[] = ['ALL', 'BUY', 'HOLD', 'SELL'];
@@ -29,10 +36,55 @@ export default function CoinFilter({
   onSignalFilterChange,
   sortBy,
   onSortChange,
+  onApiSearch,
+  apiSearching,
+  apiResultCount,
+  localResultCount,
 }: Props) {
+  const [debouncedQuery, setDebouncedQuery] = useState(query);
+  const [hasSearchedApi, setHasSearchedApi] = useState(false);
+
   const handleQuery = (val: string) => {
     onQueryChange(val);
+    setHasSearchedApi(false);
   };
+
+  // Debounce the API search - auto-trigger after 600ms of no typing
+  useEffect(() => {
+    if (!query.trim()) {
+      setDebouncedQuery('');
+      setHasSearchedApi(false);
+      return;
+    }
+
+    const timer = setTimeout(() => {
+      setDebouncedQuery(query);
+    }, 600);
+
+    return () => clearTimeout(timer);
+  }, [query]);
+
+  // Auto-trigger API search when debounced query changes and local results are low
+  useEffect(() => {
+    if (
+      debouncedQuery.trim() &&
+      onApiSearch &&
+      !hasSearchedApi &&
+      (localResultCount === 0 || (localResultCount !== undefined && localResultCount < 3))
+    ) {
+      onApiSearch(debouncedQuery);
+      setHasSearchedApi(true);
+    }
+  }, [debouncedQuery, onApiSearch, hasSearchedApi, localResultCount]);
+
+  const handleManualApiSearch = useCallback(() => {
+    if (query.trim() && onApiSearch) {
+      onApiSearch(query);
+      setHasSearchedApi(true);
+    }
+  }, [query, onApiSearch]);
+
+  const showSearchButton = query.trim().length >= 2 && onApiSearch;
 
   return (
     <div className="space-y-3">
@@ -50,12 +102,44 @@ export default function CoinFilter({
           </svg>
           <input
             type="text"
-            placeholder="Filter current results (e.g. BTC, ETH)"
+            placeholder="Search any coin (e.g. RIVER, BTC)"
             value={query}
             onChange={(e) => handleQuery(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' && showSearchButton) {
+                handleManualApiSearch();
+              }
+            }}
             className="w-full bg-slate-900 border border-slate-700 rounded-xl pl-8 pr-3 py-2 text-sm text-white placeholder-gray-500 focus:outline-none focus:border-green-500 focus:shadow-[0_0_0_1px_#22c55e]"
           />
         </div>
+
+        {/* Search from exchange button */}
+        {showSearchButton && (
+          <button
+            type="button"
+            onClick={handleManualApiSearch}
+            disabled={apiSearching}
+            className="px-3 py-2 text-xs font-medium rounded-lg bg-blue-600 hover:bg-blue-500 text-white transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1.5"
+          >
+            {apiSearching ? (
+              <>
+                <svg className="animate-spin h-3.5 w-3.5" fill="none" viewBox="0 0 24 24">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                </svg>
+                Searching...
+              </>
+            ) : (
+              <>
+                <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                </svg>
+                Search Exchange
+              </>
+            )}
+          </button>
+        )}
 
         {/* Signal filter */}
         <div className="flex gap-1">

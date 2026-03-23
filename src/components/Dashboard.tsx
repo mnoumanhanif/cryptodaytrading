@@ -9,7 +9,7 @@ import { useState, useMemo, useEffect, useCallback, useRef } from 'react';
 import { useMarketData } from '@/hooks/useMarketData';
 import { useWatchList } from '@/hooks/useWatchList';
 import { useCustomMarketPairs } from '@/hooks/useCustomMarketPairs';
-import { filterCoins, SignalFilter, SortField } from '@/hooks/useCoinSearch';
+import { filterCoins, SignalFilter, SortField, useCoinSearch } from '@/hooks/useCoinSearch';
 import { formatPrice, formatVolume } from '@/lib/utils';
 import MarketScanner from './MarketScanner';
 import WatchList from './WatchList';
@@ -1107,6 +1107,9 @@ export default function Dashboard() {
   const customMarketPairs = useCustomMarketPairs();
   const [addMarketPairOpen, setAddMarketPairOpen] = useState(false);
 
+  // API search for coins not in local list
+  const { searchResults: apiSearchResults, searching: apiSearching, searchError: apiSearchError, searchCoins } = useCoinSearch();
+
   const [query, setQuery] = useState('');
   const [signalFilter, setSignalFilter] = useState<SignalFilter>('ALL');
   const [sortBy, setSortBy] = useState<SortField>('score');
@@ -1345,9 +1348,41 @@ export default function Dashboard() {
     };
   }, []);
 
-  const displayCoins = useMemo(() => {
+  // Handler for API search from CoinFilter
+  const handleApiSearch = useCallback(
+    async (searchQuery: string) => {
+      if (searchQuery.trim()) {
+        await searchCoins(searchQuery, effectiveSelectedExchanges);
+      }
+    },
+    [searchCoins, effectiveSelectedExchanges]
+  );
+
+  // Filter local coins
+  const localFilteredCoins = useMemo(() => {
     return filterCoins(coins, query, signalFilter, sortBy);
   }, [coins, query, signalFilter, sortBy]);
+
+  // Combine local filtered coins with API search results (excluding duplicates)
+  const displayCoins = useMemo(() => {
+    if (!query.trim() || apiSearchResults.length === 0) {
+      return localFilteredCoins;
+    }
+
+    // Get symbols already in local results
+    const localSymbols = new Set(localFilteredCoins.map((c) => c.symbol));
+    
+    // Filter out duplicates from API results and apply signal filter
+    let apiCoinsFiltered = apiSearchResults.filter((c) => !localSymbols.has(c.symbol));
+    
+    // Apply signal filter to API results too
+    if (signalFilter !== 'ALL') {
+      apiCoinsFiltered = apiCoinsFiltered.filter((c) => c.signal === signalFilter);
+    }
+
+    // Combine: local results first, then API results
+    return [...localFilteredCoins, ...apiCoinsFiltered];
+  }, [localFilteredCoins, apiSearchResults, query, signalFilter]);
   const scannerTotalPages = useMemo(
     () => Math.max(1, Math.ceil(displayCoins.length / SCANNER_PAGE_SIZE)),
     [displayCoins.length]
@@ -2242,16 +2277,46 @@ export default function Dashboard() {
                 onSignalFilterChange={setSignalFilter}
                 sortBy={sortBy}
                 onSortChange={setSortBy}
+                onApiSearch={handleApiSearch}
+                apiSearching={apiSearching}
+                apiResultCount={apiSearchResults.length}
+                localResultCount={localFilteredCoins.length}
               />
+
+              {/* Show API search status/results indicator */}
+              {query.trim() && (
+                <div className="flex items-center gap-2 text-xs">
+                  <span className="text-gray-400">
+                    Local: {localFilteredCoins.length} coins
+                  </span>
+                  {apiSearchResults.length > 0 && (
+                    <span className="text-blue-400">
+                      + {apiSearchResults.filter((c) => !localFilteredCoins.some((lc) => lc.symbol === c.symbol)).length} from exchange API
+                    </span>
+                  )}
+                  {apiSearching && (
+                    <span className="text-yellow-400 flex items-center gap-1">
+                      <svg className="animate-spin h-3 w-3" fill="none" viewBox="0 0 24 24">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                      </svg>
+                      Searching exchange...
+                    </span>
+                  )}
+                  {apiSearchError && (
+                    <span className="text-red-400">Search error: {apiSearchError}</span>
+                  )}
+                </div>
+              )}
 
                 <MarketScanner
                   coins={scannerCoins}
-                  loading={loading}
+                  loading={loading || apiSearching}
                   onAddToWatchlist={addCoin}
                   isWatching={isWatching}
                   summaryLabel={
                     query.trim()
-                      ? `Showing ${displayCoins.length} of ${Math.max(totalScanned, coins.length, DEFAULT_TOTAL_SCANNED)} coins (filtered)`
+                      ? `Showing ${displayCoins.length} coins${apiSearchResults.length > 0 ? ' (includes exchange search)' : ' (filtered)'}`
                       : `Showing ${scannerCoins.length} of ${Math.max(totalScanned, coins.length, DEFAULT_TOTAL_SCANNED)} coins`
                   }
                 />
