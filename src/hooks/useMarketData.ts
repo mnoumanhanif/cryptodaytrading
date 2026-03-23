@@ -48,7 +48,7 @@ export function useMarketData(selectedExchanges: SupportedExchange[] = ['binance
   const [lastUpdated, setLastUpdated] = useState<number>(0);
   const [totalScanned, setTotalScanned] = useState(0);
 
-  const fetchData = useCallback(async () => {
+  const fetchData = useCallback(async (customSymbols: string[] = []) => {
     try {
       setError(null);
       const exchangesParam = selectedExchanges.join(',');
@@ -58,9 +58,50 @@ export function useMarketData(selectedExchanges: SupportedExchange[] = ['binance
             if (!res.ok) throw new Error(`HTTP ${res.status}`);
             return res.json();
           });
-      setCoins(data.coins);
+      let mergedCoins = data.coins;
+
+      if (!isStaticExport && customSymbols.length > 0) {
+        const requestedSymbols = Array.from(
+          new Set(
+            customSymbols
+              .map((symbol) => symbol.trim().toUpperCase())
+              .filter((symbol) => symbol.length > 0)
+              .map((symbol) => (symbol.endsWith('USDT') ? symbol : `${symbol}USDT`))
+          )
+        );
+
+        if (requestedSymbols.length > 0) {
+          const existing = new Set(mergedCoins.map((coin) => coin.symbol));
+          const missingSymbols = requestedSymbols.filter((symbol) => !existing.has(symbol));
+
+          if (missingSymbols.length > 0) {
+            const customResults = await Promise.allSettled(
+              missingSymbols.map(async (symbol) => {
+                const res = await fetch(
+                  `/api/coins/search?symbol=${encodeURIComponent(symbol)}&limit=1&exchanges=${encodeURIComponent(exchangesParam)}`,
+                  { cache: 'no-store' }
+                );
+                if (!res.ok) return null;
+                const payload = (await res.json()) as { coins?: CoinAnalysis[] };
+                return payload.coins?.[0] ?? null;
+              })
+            );
+
+            const customCoins = customResults
+              .filter((item): item is PromiseFulfilledResult<CoinAnalysis | null> => item.status === 'fulfilled')
+              .map((item) => item.value)
+              .filter((item): item is CoinAnalysis => item != null);
+
+            if (customCoins.length > 0) {
+              mergedCoins = [...mergedCoins, ...customCoins];
+            }
+          }
+        }
+      }
+
+      setCoins(mergedCoins);
       setLastUpdated(data.timestamp);
-      setTotalScanned(data.totalScanned);
+      setTotalScanned(Math.max(data.totalScanned, mergedCoins.length));
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to fetch data');
     } finally {

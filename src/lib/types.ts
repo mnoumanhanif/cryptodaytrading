@@ -202,6 +202,14 @@ export interface WatchListItem {
   stopLoss: number;
 }
 
+export interface CustomMarketPair {
+  symbol: string;
+  addedAt: number;
+  scanner: boolean;
+  watchlist: boolean;
+  signals: boolean;
+}
+
 export type PortfolioNotificationType = 'LONG' | 'SHORT' | 'RISK' | 'SQUEEZE';
 export type PortfolioNotificationPriority = 'HIGH' | 'MEDIUM';
 export type PortfolioNotificationFilter = 'ALL' | PortfolioNotificationType;
