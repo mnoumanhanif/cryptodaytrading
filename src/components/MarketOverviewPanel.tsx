@@ -145,12 +145,12 @@ export default function MarketOverviewPanel({ selectedExchanges }: MarketOvervie
         onSubmit={handleSearch}
         className="bg-gray-900 border border-gray-800 rounded-lg p-3 flex flex-col sm:flex-row gap-2 sm:items-center"
       >
-        <p className="text-xs text-gray-400 sm:w-60">Search any coin beyond top 100 lists</p>
+        <p className="text-xs text-gray-400 sm:w-60">Filter current market results</p>
         <input
           type="text"
           value={searchSymbol}
           onChange={(e) => setSearchSymbol(e.target.value)}
-          placeholder="e.g. BTCUSDT or BTC"
+          placeholder="Search by symbol (e.g., BTC, ETH, SOL)"
           className="flex-1 bg-gray-800 border border-gray-700 rounded px-3 py-2 text-sm text-white placeholder-gray-500 focus:outline-none focus:border-cyan-500"
         />
         <button

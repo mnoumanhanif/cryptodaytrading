@@ -107,6 +107,8 @@ const PATTERN_RSI_OVERSOLD_THRESHOLD = 40;
 const PATTERN_VOLUME_SPIKE_THRESHOLD = 1.6;
 const PATTERN_STRUCTURE_STRENGTH_THRESHOLD = 1.5;
 const SCANNER_PAGE_SIZE = 200;
+const DEFAULT_TOTAL_SCANNED = 1000;
+const TOP500_PAGE_SIZE = 500;
 
 const UI_HEADING_CLASS = 'text-[20px] font-bold';
 const UI_SECTION_TITLE_CLASS = 'text-[17px] font-semibold';
@@ -590,7 +592,7 @@ function Top500Panel({
   const [sort, setSort] = useState<Top500SortField>('volume');
   const [search, setSearch] = useState('');
 
-  const LIMIT = 500;
+  const LIMIT = TOP500_PAGE_SIZE;
 
   const fetchPage = useCallback(
     async (p: number, s: Top500SortField) => {
@@ -2112,7 +2114,7 @@ export default function Dashboard() {
                 <div className="bg-gray-900 border border-gray-800 rounded-lg p-2.5">
                   <p className="text-[11px] text-gray-500">Results</p>
                   <p className="text-sm font-semibold text-white">
-                    Showing {scannerCoins.length} of {totalScanned || 1000}
+                    Showing {scannerCoins.length} of {Math.max(totalScanned, coins.length, DEFAULT_TOTAL_SCANNED)}
                   </p>
                 </div>
                 <div className="bg-gray-900 border border-gray-800 rounded-lg p-2.5">
@@ -2138,17 +2140,17 @@ export default function Dashboard() {
                 onSortChange={setSortBy}
               />
 
-              <MarketScanner
-                coins={scannerCoins}
-                loading={loading}
-                onAddToWatchlist={addCoin}
-                isWatching={isWatching}
-                summaryLabel={
-                  query.trim()
-                    ? `Showing ${displayCoins.length} of ${Math.max(totalScanned, coins.length || 1000)} coins (filtered)`
-                    : `Showing ${scannerCoins.length} of ${Math.max(totalScanned, coins.length || 1000)} coins`
-                }
-              />
+                <MarketScanner
+                  coins={scannerCoins}
+                  loading={loading}
+                  onAddToWatchlist={addCoin}
+                  isWatching={isWatching}
+                  summaryLabel={
+                    query.trim()
+                      ? `Showing ${displayCoins.length} of ${Math.max(totalScanned, coins.length, DEFAULT_TOTAL_SCANNED)} coins (filtered)`
+                      : `Showing ${scannerCoins.length} of ${Math.max(totalScanned, coins.length, DEFAULT_TOTAL_SCANNED)} coins`
+                  }
+                />
               {!loading && scannerTotalPages > 1 && (
                 <div className="flex items-center justify-between gap-2 text-sm">
                   <button
@@ -2196,7 +2198,7 @@ export default function Dashboard() {
                 <span className="w-2 h-2 rounded-full bg-purple-500 animate-pulse" />
                 Top 500 Coins
               </h2>
-              <span className="text-xs text-gray-500">{selectedExchangeLabels} · 500 coins per page</span>
+              <span className="text-xs text-gray-500">{selectedExchangeLabels} · {TOP500_PAGE_SIZE} coins per page</span>
             </div>
             <Top500Panel selectedExchanges={selectedExchanges} isWatching={isWatching} />
           </div>
