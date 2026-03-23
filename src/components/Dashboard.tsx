@@ -116,6 +116,7 @@ const SCANNER_PAGE_SIZE = 200;
 const DEFAULT_TOTAL_SCANNED = 1000;
 const TOP500_PAGE_SIZE = 500;
 const CUSTOM_PAIR_RANK = 0;
+const DEFAULT_EXCHANGE: SupportedExchange = 'binance';
 
 const UI_HEADING_CLASS = 'text-[20px] font-bold';
 const UI_SECTION_TITLE_CLASS = 'text-[17px] font-semibold';
@@ -1043,23 +1044,23 @@ function PatternLearningCard({ card, learningMode }: { card: PatternDecisionCard
 
 function ExchangeSelector({
   selectedExchanges,
-  onSelectedExchangesChange,
+  onSelectedExchangeChange,
   isCoinGeckoKeySelected,
   onCoinGeckoKeySelectedChange,
 }: {
   selectedExchanges: SupportedExchange[];
-  onSelectedExchangesChange: (exchanges: SupportedExchange[]) => void;
+  onSelectedExchangeChange: (exchange: SupportedExchange) => void;
   isCoinGeckoKeySelected: boolean;
   onCoinGeckoKeySelectedChange: (selected: boolean) => void;
 }) {
-  const selectedOption: ApiKeyOptionId | null = isCoinGeckoKeySelected ? 'coingecko' : selectedExchanges[0] ?? null;
+  const selectedOption: ApiKeyOptionId = isCoinGeckoKeySelected ? 'coingecko' : selectedExchanges[0] ?? DEFAULT_EXCHANGE;
 
   const selectOption = (option: ApiKeyOptionId) => {
     if (option === 'coingecko') {
       onCoinGeckoKeySelectedChange(true);
       return;
     }
-    onSelectedExchangesChange([option]);
+    onSelectedExchangeChange(option);
     onCoinGeckoKeySelectedChange(false);
   };
 
@@ -1096,7 +1097,7 @@ function ExchangeSelector({
 
 // ── Dashboard ────────────────────────────────────────────────
 export default function Dashboard() {
-  const [selectedExchanges, setSelectedExchanges] = useState<SupportedExchange[]>(['binance']);
+  const [selectedExchanges, setSelectedExchanges] = useState<SupportedExchange[]>([DEFAULT_EXCHANGE]);
   const [isCoinGeckoKeySelected, setIsCoinGeckoKeySelected] = useState(false);
   const { coins, loading, error, lastUpdated, totalScanned, refetch } = useMarketData(selectedExchanges);
   const { items, addCoin, removeCoin, isWatching } = useWatchList();
@@ -1139,14 +1140,12 @@ export default function Dashboard() {
     () => Array.from(new Set([...customMarketPairs.scannerSymbols, ...customMarketPairs.signalsSymbols])),
     [customMarketPairs.scannerSymbols, customMarketPairs.signalsSymbols]
   );
-  const handleSelectedExchangesChange = useCallback((exchanges: SupportedExchange[]) => {
-    if (exchanges.length === 0) {
-      setSelectedExchanges(['binance']);
-      return;
-    }
-
-    setSelectedExchanges([exchanges[0]]);
+  const handleSelectedExchangeChange = useCallback((exchange: SupportedExchange) => {
+    setSelectedExchanges([exchange]);
     setIsCoinGeckoKeySelected(false);
+  }, []);
+  const handleCoinGeckoKeySelectedChange = useCallback((selected: boolean) => {
+    setIsCoinGeckoKeySelected(selected);
   }, []);
 
   const handleAddMarketPair = useCallback(
@@ -2151,9 +2150,9 @@ export default function Dashboard() {
       <div className="max-w-7xl mx-auto px-4 py-6">
         <ExchangeSelector
           selectedExchanges={selectedExchanges}
-          onSelectedExchangesChange={handleSelectedExchangesChange}
+          onSelectedExchangeChange={handleSelectedExchangeChange}
           isCoinGeckoKeySelected={isCoinGeckoKeySelected}
-          onCoinGeckoKeySelectedChange={setIsCoinGeckoKeySelected}
+          onCoinGeckoKeySelectedChange={handleCoinGeckoKeySelectedChange}
         />
 
         {/* Market overview tab */}
