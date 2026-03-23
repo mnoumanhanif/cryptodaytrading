@@ -50,12 +50,8 @@ body {
   display: inline-block;
 }
 
-.marquee .long {
-  color: #22c55e;
-}
-
-.marquee .short {
-  color: #ef4444;
+.marquee-segment {
+  color: #e5e7eb;
 }
 
 @keyframes marquee-scroll {

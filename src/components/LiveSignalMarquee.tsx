@@ -46,9 +46,9 @@ export default function LiveSignalMarquee({
   return (
     <div className="marquee border-b border-gray-800 bg-[#0b1220]">
       <div className="marquee-track" aria-live="polite">
-        <span className="long">{line}</span>
-        <span className="short">{line}</span>
-        <span className="long">{line}</span>
+        <span className="marquee-segment">{line}</span>
+        <span className="marquee-segment">{line}</span>
+        <span className="marquee-segment">{line}</span>
       </div>
     </div>
   );

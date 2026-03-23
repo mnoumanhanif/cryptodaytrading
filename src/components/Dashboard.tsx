@@ -91,6 +91,7 @@ const LIQUIDATION_SIGNAL_THRESHOLD = 0.3;
 const HIGH_VOLUME_RATIO_THRESHOLD = 1.8;
 const HIGH_LIQUIDATION_INTENSITY_THRESHOLD = 50;
 const ENTRY_REACHED_THRESHOLD_PERCENT = 0.3;
+const MAX_GENERATED_NOTIFICATIONS_PER_UPDATE = 12;
 const LIQUIDATION_CONFIDENCE_IMBALANCE_WEIGHT = 120;
 const LIQUIDATION_CONFIDENCE_INTENSITY_WEIGHT = 0.25;
 const MIN_PATTERN_WIN_PROBABILITY = 40;
@@ -1821,7 +1822,7 @@ export default function Dashboard() {
           type: signalType,
           priority: 'HIGH',
           confidence,
-          message: `Signal flipped from ${previous.bias.toUpperCase()} to ${signal.bias.toUpperCase()}.`,
+          message: `Signal flipped from ${previous.bias} to ${signal.bias}.`,
           reason: 'Signal direction changed, indicating a potential trend reversal.',
           createdAt: now,
           read: false,
@@ -1862,7 +1863,7 @@ export default function Dashboard() {
       }
     }
 
-    for (const card of liquidationSignalCards.slice(0, 15)) {
+    for (const card of liquidationIntelRows.slice(0, 15)) {
       if (card.squeezeType === 'None') continue;
       nextSqueezes[card.symbol] = card.squeezeType;
       if (previousSqueezes[card.symbol] !== card.squeezeType) {
@@ -1873,7 +1874,12 @@ export default function Dashboard() {
           priority: card.confidence >= 80 ? 'HIGH' : 'MEDIUM',
           confidence: card.confidence,
           message: `${card.squeezeType} conditions detected (${card.pressure} pressure).`,
-          reason: card.squeezeType === 'Short Squeeze' ? 'Short squeeze can force upside continuation.' : 'Long squeeze can force downside continuation.',
+          reason:
+            card.squeezeType === 'Short Squeeze'
+              ? 'Short squeeze can force upside continuation.'
+              : card.squeezeType === 'Long Squeeze'
+              ? 'Long squeeze can force downside continuation.'
+              : 'Squeeze pressure changed.',
           createdAt: now,
           read: false,
         });
@@ -1885,9 +1891,9 @@ export default function Dashboard() {
     portfolioSqueezeStateRef.current = nextSqueezes;
 
     if (generated.length > 0) {
-      pushNotifications(generated.slice(0, 12));
+      pushNotifications(generated.slice(0, MAX_GENERATED_NOTIFICATIONS_PER_UPDATE));
     }
-  }, [coins, liquidationSignalCards, pushNotifications, quickTradeSignals]);
+  }, [coins, liquidationIntelRows, pushNotifications, quickTradeSignals]);
 
   useEffect(() => {
     if (activeTab !== 'patterns') return;
