@@ -25,7 +25,6 @@ import { SupportedExchange } from '@/lib/exchangeMarket';
 import { CoinAnalysis } from '@/lib/types';
 
 type ApiKeyOptionId = SupportedExchange | 'coingecko';
-const isExchangeOption = (value: ApiKeyOptionId): value is SupportedExchange => value !== 'coingecko';
 
 const API_KEY_OPTIONS: Array<{ id: ApiKeyOptionId; label: string; envKey: string }> = [
   { id: 'binance', label: 'Binance API Key', envKey: 'BINANCE_API_KEY' },
@@ -117,6 +116,7 @@ const SCANNER_PAGE_SIZE = 200;
 const DEFAULT_TOTAL_SCANNED = 1000;
 const TOP500_PAGE_SIZE = 500;
 const CUSTOM_PAIR_RANK = 0;
+const DEFAULT_EXCHANGE: SupportedExchange = 'binance';
 
 const UI_HEADING_CLASS = 'text-[20px] font-bold';
 const UI_SECTION_TITLE_CLASS = 'text-[17px] font-semibold';
@@ -1044,51 +1044,43 @@ function PatternLearningCard({ card, learningMode }: { card: PatternDecisionCard
 
 function ExchangeSelector({
   selectedExchanges,
-  onSelectedExchangesChange,
+  onSelectedExchangeChange,
   isCoinGeckoKeySelected,
   onCoinGeckoKeySelectedChange,
 }: {
   selectedExchanges: SupportedExchange[];
-  onSelectedExchangesChange: (exchanges: SupportedExchange[]) => void;
+  onSelectedExchangeChange: (exchange: SupportedExchange) => void;
   isCoinGeckoKeySelected: boolean;
   onCoinGeckoKeySelectedChange: (selected: boolean) => void;
 }) {
-  const toggleExchange = (exchange: SupportedExchange) => {
-    const nextSelection = selectedExchanges.includes(exchange)
-      ? selectedExchanges.filter((item) => item !== exchange)
-      : [...selectedExchanges, exchange];
-    if (nextSelection.length > 0) {
-      onSelectedExchangesChange(nextSelection);
+  const selectedOption: ApiKeyOptionId = isCoinGeckoKeySelected ? 'coingecko' : selectedExchanges[0] ?? DEFAULT_EXCHANGE;
+
+  const selectOption = (option: ApiKeyOptionId) => {
+    if (option === 'coingecko') {
+      onCoinGeckoKeySelectedChange(true);
+      return;
     }
+    onSelectedExchangeChange(option);
   };
 
   return (
     <div className="bg-gray-900 border border-gray-800 rounded-lg p-3 mb-4">
-      <p className="text-xs text-gray-400 mb-2">Select exchange API key(s) for all dashboard tabs</p>
+      <p className="text-xs text-gray-400 mb-2">Select one exchange API key for all dashboard tabs</p>
       <div className="grid grid-cols-1 sm:grid-cols-4 gap-2">
         {API_KEY_OPTIONS.map((option) => (
           <label
             key={option.id}
             className={`flex items-start gap-2 rounded border px-3 py-2 cursor-pointer transition-colors ${
-              isExchangeOption(option.id)
-                ? selectedExchanges.includes(option.id)
-                  ? 'border-cyan-500 bg-cyan-500/10'
-                  : 'border-gray-700 bg-gray-800/40 hover:border-gray-600'
-                : isCoinGeckoKeySelected
-                  ? 'border-cyan-500 bg-cyan-500/10'
-                  : 'border-gray-700 bg-gray-800/40 hover:border-gray-600'
+              selectedOption === option.id
+                ? 'border-cyan-500 bg-cyan-500/10'
+                : 'border-gray-700 bg-gray-800/40 hover:border-gray-600'
             }`}
           >
             <input
-              type="checkbox"
-              checked={isExchangeOption(option.id) ? selectedExchanges.includes(option.id) : isCoinGeckoKeySelected}
-              onChange={() => {
-                if (isExchangeOption(option.id)) {
-                  toggleExchange(option.id);
-                  return;
-                }
-                onCoinGeckoKeySelectedChange(!isCoinGeckoKeySelected);
-              }}
+              type="radio"
+              name="dashboard-api-key-option"
+              checked={selectedOption === option.id}
+              onChange={() => selectOption(option.id)}
               className="mt-0.5 h-4 w-4 rounded border-gray-600 bg-gray-800 text-cyan-500 focus:ring-cyan-500"
             />
             <span className="text-sm text-white leading-tight">
@@ -1104,9 +1096,13 @@ function ExchangeSelector({
 
 // ── Dashboard ────────────────────────────────────────────────
 export default function Dashboard() {
-  const [selectedExchanges, setSelectedExchanges] = useState<SupportedExchange[]>(['binance']);
+  const [selectedExchanges, setSelectedExchanges] = useState<SupportedExchange[]>([DEFAULT_EXCHANGE]);
   const [isCoinGeckoKeySelected, setIsCoinGeckoKeySelected] = useState(false);
-  const { coins, loading, error, lastUpdated, totalScanned, refetch } = useMarketData(selectedExchanges);
+  const effectiveSelectedExchanges = useMemo(
+    () => (selectedExchanges.length > 0 ? [selectedExchanges[0]] : [DEFAULT_EXCHANGE]),
+    [selectedExchanges]
+  );
+  const { coins, loading, error, lastUpdated, totalScanned, refetch } = useMarketData(effectiveSelectedExchanges);
   const { items, addCoin, removeCoin, isWatching } = useWatchList();
   const customMarketPairs = useCustomMarketPairs();
   const [addMarketPairOpen, setAddMarketPairOpen] = useState(false);
@@ -1142,11 +1138,25 @@ export default function Dashboard() {
   const portfolioSqueezeStateRef = useRef<Record<string, string>>({});
   const { notifications, unreadCount, pushNotifications, markAsRead, markAllAsRead } = usePortfolioNotifications();
   const primaryNavRef = useRef<HTMLDivElement | null>(null);
-  const selectedExchangeLabels = selectedExchanges.map((exchange) => EXCHANGE_LABELS[exchange]).join(', ');
+  const selectedExchangeLabels = effectiveSelectedExchanges
+    .map((exchange) => EXCHANGE_LABELS[exchange])
+    .join(', ');
   const trackedCustomSymbols = useMemo(
     () => Array.from(new Set([...customMarketPairs.scannerSymbols, ...customMarketPairs.signalsSymbols])),
     [customMarketPairs.scannerSymbols, customMarketPairs.signalsSymbols]
   );
+  const handleSelectedExchangeChange = useCallback((exchange: SupportedExchange) => {
+    setSelectedExchanges([exchange]);
+    setIsCoinGeckoKeySelected(false);
+  }, [setSelectedExchanges, setIsCoinGeckoKeySelected]);
+  const handleCoinGeckoKeySelectedChange = useCallback((selected: boolean) => {
+    setIsCoinGeckoKeySelected(selected);
+    if (selected) {
+      setSelectedExchanges([]);
+      return;
+    }
+    setSelectedExchanges([DEFAULT_EXCHANGE]);
+  }, [setIsCoinGeckoKeySelected, setSelectedExchanges]);
 
   const handleAddMarketPair = useCallback(
     (coin: CoinAnalysis, targets: { scanner: boolean; watchlist: boolean; signals: boolean }) => {
@@ -1348,7 +1358,7 @@ export default function Dashboard() {
   }, [displayCoins, scannerPage]);
   useEffect(() => {
     setScannerPage(1);
-  }, [query, signalFilter, sortBy, selectedExchanges, coins.length]);
+  }, [query, signalFilter, sortBy, effectiveSelectedExchanges, coins.length]);
   useEffect(() => {
     if (scannerPage > scannerTotalPages) {
       setScannerPage(scannerTotalPages);
@@ -2149,10 +2159,10 @@ export default function Dashboard() {
       {/* Tab content */}
       <div className="max-w-7xl mx-auto px-4 py-6">
         <ExchangeSelector
-          selectedExchanges={selectedExchanges}
-          onSelectedExchangesChange={setSelectedExchanges}
+          selectedExchanges={effectiveSelectedExchanges}
+          onSelectedExchangeChange={handleSelectedExchangeChange}
           isCoinGeckoKeySelected={isCoinGeckoKeySelected}
-          onCoinGeckoKeySelectedChange={setIsCoinGeckoKeySelected}
+          onCoinGeckoKeySelectedChange={handleCoinGeckoKeySelectedChange}
         />
 
         {/* Market overview tab */}
@@ -2165,7 +2175,7 @@ export default function Dashboard() {
               </h2>
               <span className="text-xs text-gray-500">Multi-exchange snapshot</span>
             </div>
-            <MarketOverviewPanel selectedExchanges={selectedExchanges} />
+            <MarketOverviewPanel selectedExchanges={effectiveSelectedExchanges} />
           </div>
         )}
 
@@ -2295,7 +2305,7 @@ export default function Dashboard() {
               <span className="text-xs text-gray-500">{selectedExchangeLabels} · {TOP500_PAGE_SIZE} coins per page</span>
             </div>
             <Top500Panel
-              selectedExchanges={selectedExchanges}
+              selectedExchanges={effectiveSelectedExchanges}
               isWatching={isWatching}
               customPairs={customMarketPairs.pairs.map((pair) => pair.symbol)}
               customCoins={coins}
@@ -2306,7 +2316,7 @@ export default function Dashboard() {
 
         <AddMarketPairModal
           isOpen={addMarketPairOpen}
-          selectedExchanges={selectedExchanges}
+          selectedExchanges={effectiveSelectedExchanges}
           isFull={customMarketPairs.isFull}
           onClose={() => setAddMarketPairOpen(false)}
           onAddCoin={handleAddMarketPair}
