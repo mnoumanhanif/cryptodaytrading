@@ -16,6 +16,9 @@ import CoinFilter from './CoinFilter';
 import CoinHeatmap from './CoinHeatmap';
 import CoinPagination from './CoinPagination';
 import MarketOverviewPanel from './MarketOverviewPanel';
+import LiveSignalMarquee from './LiveSignalMarquee';
+import PortfolioNotifications from './PortfolioNotifications';
+import { usePortfolioNotifications } from '@/hooks/usePortfolioNotifications';
 import { SupportedExchange } from '@/lib/exchangeMarket';
 
 const EXCHANGE_OPTIONS: Array<{ id: SupportedExchange; label: string; envKey: string }> = [
@@ -1084,6 +1087,11 @@ export default function Dashboard() {
   const [signalAlerts, setSignalAlerts] = useState<QuickSignalAlert[]>([]);
   const [signalChanges, setSignalChanges] = useState<Array<{ symbol: string; change: SignalChangeDirection; confidence: number }>>([]);
   const previousSignalStateRef = useRef<Record<string, { bias: QuickSignalBias; confidence: number }>>({});
+  const marqueeSignalSeenRef = useRef<Record<string, number>>({});
+  const portfolioSignalStateRef = useRef<Record<string, { bias: QuickSignalBias; confidence: number }>>({});
+  const portfolioRiskStateRef = useRef<Record<string, boolean>>({});
+  const portfolioSqueezeStateRef = useRef<Record<string, string>>({});
+  const { notifications, unreadCount, pushNotifications, markAsRead, markAllAsRead } = usePortfolioNotifications();
   const primaryNavRef = useRef<HTMLDivElement | null>(null);
   const selectedExchangeLabels = selectedExchanges.map((exchange) => EXCHANGE_LABELS[exchange]).join(', ');
   const getTabLabel = useCallback(
@@ -1447,6 +1455,40 @@ export default function Dashboard() {
   const longQuickSignals = useMemo(() => quickTradeSignals.filter((item) => item.bias === 'Long'), [quickTradeSignals]);
   const shortQuickSignals = useMemo(() => quickTradeSignals.filter((item) => item.bias === 'Short'), [quickTradeSignals]);
 
+  const marqueeSignals = useMemo(() => {
+    const now = Date.now();
+    const seen = marqueeSignalSeenRef.current;
+    const isNewWindowMs = 5 * 60 * 1000;
+
+    for (const signal of quickTradeSignals) {
+      if (!seen[signal.symbol]) {
+        seen[signal.symbol] = now;
+      }
+    }
+
+    const topLong = [...longQuickSignals]
+      .sort((a, b) => b.confidence - a.confidence)
+      .slice(0, 10)
+      .map((signal) => ({
+        symbol: signal.symbol,
+        confidence: signal.confidence,
+        bias: signal.bias,
+        isNew: now - (seen[signal.symbol] ?? now) <= isNewWindowMs,
+      }));
+
+    const topShort = [...shortQuickSignals]
+      .sort((a, b) => b.confidence - a.confidence)
+      .slice(0, 10)
+      .map((signal) => ({
+        symbol: signal.symbol,
+        confidence: signal.confidence,
+        bias: signal.bias,
+        isNew: now - (seen[signal.symbol] ?? now) <= isNewWindowMs,
+      }));
+
+    return { topLong, topShort };
+  }, [longQuickSignals, quickTradeSignals, shortQuickSignals]);
+
   const patternDecisionCards = useMemo<PatternDecisionCard[]>(() => {
     const coinBySymbol = new Map(coins.map((coin) => [coin.symbol, coin]));
 
@@ -1729,6 +1771,125 @@ export default function Dashboard() {
   }, [notifySymbols, quickTradeSignals]);
 
   useEffect(() => {
+    const now = Date.now();
+    const previousSignals = portfolioSignalStateRef.current;
+    const previousRisks = portfolioRiskStateRef.current;
+    const previousSqueezes = portfolioSqueezeStateRef.current;
+
+    const nextSignals: Record<string, { bias: QuickSignalBias; confidence: number }> = {};
+    const nextRisks: Record<string, boolean> = {};
+    const nextSqueezes: Record<string, string> = {};
+    const generated: Array<{
+      id: string;
+      symbol: string;
+      type: 'LONG' | 'SHORT' | 'RISK' | 'SQUEEZE';
+      priority: 'HIGH' | 'MEDIUM';
+      confidence?: number;
+      message: string;
+      reason: string;
+      createdAt: number;
+      read: boolean;
+    }> = [];
+
+    for (const signal of quickTradeSignals) {
+      const previous = previousSignals[signal.symbol];
+      const signalType = signal.bias === 'Long' ? 'LONG' : 'SHORT';
+      const confidence = signal.confidence;
+      nextSignals[signal.symbol] = { bias: signal.bias, confidence };
+      const isQualified = confidence > 75;
+      if (!isQualified) continue;
+
+      if (!previous) {
+        generated.push({
+          id: `${signal.symbol}-new-${now}`,
+          symbol: signal.symbol,
+          type: signalType,
+          priority: confidence >= 85 ? 'HIGH' : 'MEDIUM',
+          confidence,
+          message: `${signal.bias} signal appeared with high confidence.`,
+          reason: 'New signal detected and confidence is above 75%.',
+          createdAt: now,
+          read: false,
+        });
+        continue;
+      }
+
+      if (previous.bias !== signal.bias) {
+        generated.push({
+          id: `${signal.symbol}-flip-${now}`,
+          symbol: signal.symbol,
+          type: signalType,
+          priority: 'HIGH',
+          confidence,
+          message: `Signal flipped from ${previous.bias.toUpperCase()} to ${signal.bias.toUpperCase()}.`,
+          reason: 'Signal direction changed, indicating a potential trend reversal.',
+          createdAt: now,
+          read: false,
+        });
+      } else if (confidence > previous.confidence) {
+        generated.push({
+          id: `${signal.symbol}-confidence-${now}`,
+          symbol: signal.symbol,
+          type: signalType,
+          priority: confidence >= 85 ? 'HIGH' : 'MEDIUM',
+          confidence,
+          message: `${signal.bias} confidence increased from ${previous.confidence}% to ${confidence}%.`,
+          reason: 'Confidence increased versus previous update.',
+          createdAt: now,
+          read: false,
+        });
+      }
+    }
+
+    for (const coin of coins) {
+      const extremeRisk = coin.indicators.rsi.value > 80 || coin.indicators.rsi.value < 20;
+      nextRisks[coin.symbol] = extremeRisk;
+      if (extremeRisk && !previousRisks[coin.symbol]) {
+        generated.push({
+          id: `${coin.symbol}-risk-${now}`,
+          symbol: coin.symbol,
+          type: 'RISK',
+          priority: 'HIGH',
+          confidence: Math.round(coin.tradeSignal.confidence),
+          message: `RSI at ${coin.indicators.rsi.value.toFixed(1)} indicates extreme market condition.`,
+          reason:
+            coin.indicators.rsi.value > 80
+              ? 'Overbought risk: possible reversal.'
+              : 'Oversold risk: possible sharp counter move.',
+          createdAt: now,
+          read: false,
+        });
+      }
+    }
+
+    for (const card of liquidationSignalCards.slice(0, 15)) {
+      if (card.squeezeType === 'None') continue;
+      nextSqueezes[card.symbol] = card.squeezeType;
+      if (previousSqueezes[card.symbol] !== card.squeezeType) {
+        generated.push({
+          id: `${card.symbol}-squeeze-${now}`,
+          symbol: card.symbol,
+          type: 'SQUEEZE',
+          priority: card.confidence >= 80 ? 'HIGH' : 'MEDIUM',
+          confidence: card.confidence,
+          message: `${card.squeezeType} conditions detected (${card.pressure} pressure).`,
+          reason: card.squeezeType === 'Short Squeeze' ? 'Short squeeze can force upside continuation.' : 'Long squeeze can force downside continuation.',
+          createdAt: now,
+          read: false,
+        });
+      }
+    }
+
+    portfolioSignalStateRef.current = nextSignals;
+    portfolioRiskStateRef.current = nextRisks;
+    portfolioSqueezeStateRef.current = nextSqueezes;
+
+    if (generated.length > 0) {
+      pushNotifications(generated.slice(0, 12));
+    }
+  }, [coins, liquidationSignalCards, pushNotifications, quickTradeSignals]);
+
+  useEffect(() => {
     if (activeTab !== 'patterns') return;
     let cancelled = false;
     setPatternMatchesLoading(true);
@@ -1826,6 +1987,8 @@ export default function Dashboard() {
           </div>
         </div>
       </header>
+
+      <LiveSignalMarquee longSignals={marqueeSignals.topLong} shortSignals={marqueeSignals.topShort} />
 
       {/* Error banner */}
       {error && (
@@ -2793,17 +2956,25 @@ export default function Dashboard() {
 
         {/* Watchlist tab */}
         {activeTab === 'watchlist' && (
-          <div>
+          <div className="space-y-4">
             <h2 className="text-lg font-semibold mb-4 flex items-center gap-2">
               <span className="w-2 h-2 rounded-full bg-green-500" />
               Watchlist
               {items.length > 0 && (
                 <span className="text-xs text-gray-500 font-normal">({items.length} coins)</span>
               )}
+              {unreadCount > 0 && (
+                <span className="text-xs text-cyan-300 font-normal">• {unreadCount} unread notifications</span>
+              )}
             </h2>
             <div className="max-w-2xl">
               <WatchList items={items} coins={coins} onRemove={removeCoin} />
             </div>
+            <PortfolioNotifications
+              notifications={notifications}
+              onMarkAsRead={markAsRead}
+              onMarkAllAsRead={markAllAsRead}
+            />
           </div>
         )}
       </div>
