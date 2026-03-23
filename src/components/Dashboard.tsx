@@ -1052,7 +1052,7 @@ function ExchangeSelector({
   isCoinGeckoKeySelected: boolean;
   onCoinGeckoKeySelectedChange: (selected: boolean) => void;
 }) {
-  const selectedOption: ApiKeyOptionId = isCoinGeckoKeySelected ? 'coingecko' : selectedExchanges[0] ?? 'binance';
+  const selectedOption: ApiKeyOptionId | null = isCoinGeckoKeySelected ? 'coingecko' : selectedExchanges[0] ?? null;
 
   const selectOption = (option: ApiKeyOptionId) => {
     if (option === 'coingecko') {
@@ -1139,6 +1139,21 @@ export default function Dashboard() {
     () => Array.from(new Set([...customMarketPairs.scannerSymbols, ...customMarketPairs.signalsSymbols])),
     [customMarketPairs.scannerSymbols, customMarketPairs.signalsSymbols]
   );
+
+  useEffect(() => {
+    if (isCoinGeckoKeySelected) {
+      return;
+    }
+
+    if (selectedExchanges.length === 0) {
+      setSelectedExchanges(['binance']);
+      return;
+    }
+
+    if (selectedExchanges.length > 1) {
+      setSelectedExchanges([selectedExchanges[0]]);
+    }
+  }, [isCoinGeckoKeySelected, selectedExchanges, setSelectedExchanges]);
 
   const handleAddMarketPair = useCallback(
     (coin: CoinAnalysis, targets: { scanner: boolean; watchlist: boolean; signals: boolean }) => {
