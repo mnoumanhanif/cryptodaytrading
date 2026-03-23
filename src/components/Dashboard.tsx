@@ -83,6 +83,8 @@ const LIQUIDATION_SIGNAL_THRESHOLD = 0.3;
 const HIGH_VOLUME_RATIO_THRESHOLD = 1.8;
 const HIGH_LIQUIDATION_INTENSITY_THRESHOLD = 50;
 const ENTRY_REACHED_THRESHOLD_PERCENT = 0.3;
+const LIQUIDATION_CONFIDENCE_IMBALANCE_WEIGHT = 120;
+const LIQUIDATION_CONFIDENCE_INTENSITY_WEIGHT = 0.25;
 
 const UI_HEADING_CLASS = 'text-[20px] font-bold';
 const UI_SECTION_TITLE_CLASS = 'text-[17px] font-semibold';
@@ -164,6 +166,7 @@ type QuickSignalItem = {
   entry: number;
   stopLoss: number;
   target: number;
+  referenceEntry: number;
   volumeRatio: number;
   biggestMove: number;
 };
@@ -1147,8 +1150,6 @@ export default function Dashboard() {
     const scored = coins.map((coin) => {
       const rsi = coin.indicators.rsi.value;
       const volumeRatio = coin.indicators.volume?.volumeRatio ?? 0;
-      const currentVolume = coin.indicators.volume?.currentVolume ?? 0;
-      const averageVolume = coin.indicators.volume?.averageVolume ?? 0;
       const support = coin.indicators.fibonacci?.nearestSupport ?? coin.risk.stopLoss;
       const resistance = coin.indicators.fibonacci?.nearestResistance ?? coin.risk.targetPrice;
       const supportDistancePct = support > 0 ? Math.abs((coin.price - support) / support) * 100 : 100;
@@ -1174,6 +1175,7 @@ export default function Dashboard() {
       const signalStrength = getSignalStrength(confidence);
       const confidenceBand = getConfidenceBand(confidence);
       const entry = coin.price;
+      const referenceEntry = coin.risk.entryPrice > 0 ? coin.risk.entryPrice : entry;
       const stopLoss = bias === 'Long'
         ? Math.min(entry * 0.985, coin.risk.stopLoss > 0 ? coin.risk.stopLoss : entry * 0.985)
         : Math.max(entry * 1.015, coin.risk.stopLoss > 0 ? coin.risk.stopLoss : entry * 1.015);
@@ -1189,12 +1191,11 @@ export default function Dashboard() {
         confidence,
         confidenceBand,
         entry,
+        referenceEntry,
         stopLoss,
         target,
         volumeRatio,
         biggestMove: Math.abs(coin.priceChangePercent),
-        currentVolume,
-        averageVolume,
       };
     });
 
@@ -1229,7 +1230,13 @@ export default function Dashboard() {
           : 'Neutral';
         const action = signal === 'LONG' ? 'Buy dip' : signal === 'SHORT' ? 'Sell rally' : 'Wait';
         const strength = getSignalStrength(Math.round(Math.min(99, Math.abs(normalizedImbalance) * 100)));
-        const confidence = Math.round(Math.min(99, Math.abs(normalizedImbalance) * 120 + item.intensity * 0.25));
+        const confidence = Math.round(
+          Math.min(
+            99,
+            Math.abs(normalizedImbalance) * LIQUIDATION_CONFIDENCE_IMBALANCE_WEIGHT +
+              item.intensity * LIQUIDATION_CONFIDENCE_INTENSITY_WEIGHT
+          )
+        );
         return {
           ...item,
           normalizedImbalance,
@@ -1323,7 +1330,8 @@ export default function Dashboard() {
         });
       }
 
-      const entryDistancePct = signal.entry > 0 ? Math.abs((signal.price - signal.entry) / signal.entry) * 100 : 100;
+      const entryDistancePct =
+        signal.referenceEntry > 0 ? Math.abs((signal.price - signal.referenceEntry) / signal.referenceEntry) * 100 : 100;
       if (entryDistancePct <= ENTRY_REACHED_THRESHOLD_PERCENT) {
         newAlerts.push({
           symbol: signal.symbol,
