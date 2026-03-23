@@ -5,7 +5,7 @@
 //   Heatmap | Scanner | Top 500 | Watchlist
 // ============================================================
 
-import { useState, useMemo, useEffect, useCallback } from 'react';
+import { useState, useMemo, useEffect, useCallback, useRef } from 'react';
 import { useMarketData } from '@/hooks/useMarketData';
 import { useWatchList } from '@/hooks/useWatchList';
 import { useCoinSearch, filterCoins, SignalFilter, SortField } from '@/hooks/useCoinSearch';
@@ -51,6 +51,8 @@ type DashboardTab =
   | 'patterns'
   | 'suggestions'
   | 'liquidations'
+  | 'quicksignals'
+  | 'liquidationintel'
   | 'warnings'
   | 'volumewhales'
   | 'smartwatchlist'
@@ -77,6 +79,17 @@ const LIQUIDATION_INTENSITY_VOLUME_WEIGHT = 25;
 const LIQUIDATION_INTENSITY_VOLATILITY_WEIGHT = 3;
 const SMART_WATCHLIST_VOLATILITY_MULTIPLIER = 8;
 const SMART_WATCHLIST_LIQUIDITY_MULTIPLIER = 35;
+const LIQUIDATION_SIGNAL_THRESHOLD = 0.3;
+const HIGH_VOLUME_RATIO_THRESHOLD = 1.8;
+const HIGH_LIQUIDATION_INTENSITY_THRESHOLD = 50;
+const ENTRY_REACHED_THRESHOLD_PERCENT = 0.3;
+const LIQUIDATION_CONFIDENCE_IMBALANCE_WEIGHT = 120;
+const LIQUIDATION_CONFIDENCE_INTENSITY_WEIGHT = 0.25;
+
+const UI_HEADING_CLASS = 'text-[20px] font-bold';
+const UI_SECTION_TITLE_CLASS = 'text-[17px] font-semibold';
+const UI_DATA_TEXT_CLASS = 'text-sm';
+const UI_SMALL_LABEL_CLASS = 'text-[11px]';
 
 type CandlePattern = {
   name: string;
@@ -135,6 +148,92 @@ type WhaleActivityItem = {
   estimatedUsd: number;
   confidence: number;
 };
+
+type QuickSignalBias = 'Long' | 'Short';
+type SignalStrength = 'Strong' | 'Medium' | 'Weak';
+type TradeConfidenceBand = 'Avoid' | 'Risky' | 'Good' | 'Strong trade';
+type QuickSignalSort = 'confidence' | 'volume' | 'move';
+type QuickSignalTimeframe = '5m' | '15m' | '1h' | '4h';
+type SignalChangeDirection = 'LONG_TO_SHORT' | 'SHORT_TO_LONG';
+
+type QuickSignalItem = {
+  symbol: string;
+  price: number;
+  bias: QuickSignalBias;
+  signalStrength: SignalStrength;
+  confidence: number;
+  confidenceBand: TradeConfidenceBand;
+  entry: number;
+  stopLoss: number;
+  target: number;
+  referenceEntry: number;
+  volumeRatio: number;
+  biggestMove: number;
+};
+
+type QuickSignalAlertType = 'SIGNAL_APPEARED' | 'CONFIDENCE_INCREASED' | 'ENTRY_REACHED';
+
+type QuickSignalAlert = {
+  symbol: string;
+  type: QuickSignalAlertType;
+  message: string;
+  confidence: number;
+  bias: QuickSignalBias;
+};
+
+function getSignalStrength(confidence: number): SignalStrength {
+  if (confidence >= 85) return 'Strong';
+  if (confidence >= 70) return 'Medium';
+  return 'Weak';
+}
+
+function getConfidenceBand(confidence: number): TradeConfidenceBand {
+  if (confidence < 50) return 'Avoid';
+  if (confidence < 70) return 'Risky';
+  if (confidence < 85) return 'Good';
+  return 'Strong trade';
+}
+
+function inferBiasFromLiquidation(imbalance: number): QuickSignalBias {
+  return imbalance >= 0 ? 'Long' : 'Short';
+}
+
+function pressureLabel(imbalance: number): string {
+  if (imbalance > LIQUIDATION_SIGNAL_THRESHOLD) return `🟢 Bullish Pressure (+${imbalance.toFixed(2)})`;
+  if (imbalance < -LIQUIDATION_SIGNAL_THRESHOLD) return `🔴 Bearish Pressure (${imbalance.toFixed(2)})`;
+  return `🟡 Neutral Pressure (${imbalance.toFixed(2)})`;
+}
+
+function signalLabelFromImbalance(imbalance: number): 'LONG' | 'SHORT' | 'WAIT' {
+  if (imbalance > LIQUIDATION_SIGNAL_THRESHOLD) return 'LONG';
+  if (imbalance < -LIQUIDATION_SIGNAL_THRESHOLD) return 'SHORT';
+  return 'WAIT';
+}
+
+function pressureColorFromImbalance(imbalance: number): string {
+  if (imbalance > LIQUIDATION_SIGNAL_THRESHOLD) return 'text-green-300';
+  if (imbalance < -LIQUIDATION_SIGNAL_THRESHOLD) return 'text-red-300';
+  return 'text-yellow-300';
+}
+
+function biasBadgeClass(bias: QuickSignalBias): string {
+  return bias === 'Long'
+    ? 'text-green-300 border-green-600/50 bg-green-900/30'
+    : 'text-red-300 border-red-600/50 bg-red-900/30';
+}
+
+function strengthBadgeClass(strength: SignalStrength): string {
+  if (strength === 'Strong') return 'text-green-200 border-green-500/40 bg-green-500/15';
+  if (strength === 'Medium') return 'text-yellow-200 border-yellow-500/40 bg-yellow-500/15';
+  return 'text-orange-200 border-orange-500/40 bg-orange-500/15';
+}
+
+function liquidationVisualBar(value: number, maxValue: number): string {
+  const BAR_STEPS = 12;
+  const ratio = maxValue > 0 ? Math.min(1, Math.max(0, value / maxValue)) : 0;
+  const filled = Math.round(ratio * BAR_STEPS);
+  return `${'█'.repeat(filled)}${'░'.repeat(Math.max(0, BAR_STEPS - filled))}`;
+}
 
 function matchesPattern(coin: { signal: 'BUY' | 'SELL' | 'HOLD'; score: number; priceChangePercent: number }, pattern: CandlePattern): boolean {
   if (pattern.bias === 'Bullish') {
@@ -783,9 +882,20 @@ export default function Dashboard() {
   const [signalFilter, setSignalFilter] = useState<SignalFilter>('ALL');
   const [sortBy, setSortBy] = useState<SortField>('score');
   const [activeTab, setActiveTab] = useState<DashboardTab>('overview');
+  const [quickSignalTimeframe, setQuickSignalTimeframe] = useState<QuickSignalTimeframe>('15m');
+  const [quickSignalSort, setQuickSignalSort] = useState<QuickSignalSort>('confidence');
+  const [quickSignalConfidenceOnly70, setQuickSignalConfidenceOnly70] = useState(true);
+  const [quickSignalVolumeHighOnly, setQuickSignalVolumeHighOnly] = useState(false);
+  const [liquidationTimeframe, setLiquidationTimeframe] = useState<'5m' | '15m' | '1h'>('15m');
+  const [liquidationMinImbalance, setLiquidationMinImbalance] = useState(0.3);
+  const [liquidationHighOnly, setLiquidationHighOnly] = useState(false);
   const [patternCoinMatches, setPatternCoinMatches] = useState<PatternCoinMatches>(() => buildPatternCoinMatches(coins));
   const [patternMatchesLoading, setPatternMatchesLoading] = useState(false);
   const [patternMatchesError, setPatternMatchesError] = useState<string | null>(null);
+  const [notifySymbols, setNotifySymbols] = useState<Record<string, boolean>>({});
+  const [signalAlerts, setSignalAlerts] = useState<QuickSignalAlert[]>([]);
+  const [signalChanges, setSignalChanges] = useState<Array<{ symbol: string; change: SignalChangeDirection; confidence: number }>>([]);
+  const previousSignalStateRef = useRef<Record<string, { bias: QuickSignalBias; confidence: number }>>({});
   const selectedExchangeLabels = selectedExchanges.map((exchange) => EXCHANGE_LABELS[exchange]).join(', ');
 
   const suggestionData = useMemo(() => {
@@ -893,7 +1003,10 @@ export default function Dashboard() {
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const tab = params.get('tab') as DashboardTab | null;
-    if (tab && ['overview', 'heatmap', 'scanner', 'top500', 'patterns', 'suggestions', 'liquidations', 'warnings', 'volumewhales', 'smartwatchlist', 'watchlist'].includes(tab)) {
+    if (
+      tab &&
+      ['overview', 'heatmap', 'scanner', 'top500', 'patterns', 'suggestions', 'liquidations', 'quicksignals', 'liquidationintel', 'warnings', 'volumewhales', 'smartwatchlist', 'watchlist'].includes(tab)
+    ) {
       setActiveTab(tab);
     }
   }, []);
@@ -1024,6 +1137,129 @@ export default function Dashboard() {
     [coins]
   );
 
+  const quickTradeSignals = useMemo<QuickSignalItem[]>(() => {
+    const timeframeMultiplier: Record<QuickSignalTimeframe, number> = {
+      '5m': 0.9,
+      '15m': 1,
+      '1h': 1.08,
+      '4h': 1.15,
+    };
+
+    const multiplier = timeframeMultiplier[quickSignalTimeframe];
+
+    const scored = coins.map((coin) => {
+      const rsi = coin.indicators.rsi.value;
+      const volumeRatio = coin.indicators.volume?.volumeRatio ?? 0;
+      const support = coin.indicators.fibonacci?.nearestSupport ?? coin.risk.stopLoss;
+      const resistance = coin.indicators.fibonacci?.nearestResistance ?? coin.risk.targetPrice;
+      const supportDistancePct = support > 0 ? Math.abs((coin.price - support) / support) * 100 : 100;
+      const resistanceDistancePct = resistance > 0 ? Math.abs((resistance - coin.price) / resistance) * 100 : 100;
+      const trendScore = coin.indicators.ma.trend === 'bullish' ? 100 : coin.indicators.ma.trend === 'bearish' ? 0 : 50;
+      const bullishCandleProxy = coin.signal === 'BUY' ? 100 : coin.signal === 'HOLD' ? 45 : 20;
+      const bearishCandleProxy = coin.signal === 'SELL' ? 100 : coin.signal === 'HOLD' ? 45 : 20;
+      const volumeWeight = Math.min(100, volumeRatio * 50);
+      const longRsiWeight = rsi < 30 ? 100 : rsi < 40 ? 70 : 25;
+      const shortRsiWeight = rsi > 70 ? 100 : rsi > 60 ? 70 : 25;
+      const longSupportWeight = supportDistancePct <= 1.2 ? 100 : supportDistancePct <= 2 ? 75 : 35;
+      const shortResistanceWeight = resistanceDistancePct <= 1.2 ? 100 : resistanceDistancePct <= 2 ? 75 : 35;
+      const longTrendWeight = trendScore;
+      const shortTrendWeight = 100 - trendScore;
+
+      const longScoreRaw = longRsiWeight * 0.32 + volumeWeight * 0.24 + longTrendWeight * 0.22 + longSupportWeight * 0.22;
+      const shortScoreRaw = shortRsiWeight * 0.32 + volumeWeight * 0.24 + shortTrendWeight * 0.22 + shortResistanceWeight * 0.22;
+
+      const longConfidence = Math.round(Math.min(99, longScoreRaw * multiplier * (bullishCandleProxy >= 80 ? 1.06 : 0.98)));
+      const shortConfidence = Math.round(Math.min(99, shortScoreRaw * multiplier * (bearishCandleProxy >= 80 ? 1.06 : 0.98)));
+      const bias: QuickSignalBias = longConfidence >= shortConfidence ? 'Long' : 'Short';
+      const confidence = Math.max(longConfidence, shortConfidence);
+      const signalStrength = getSignalStrength(confidence);
+      const confidenceBand = getConfidenceBand(confidence);
+      const entry = coin.price;
+      const referenceEntry = coin.risk.entryPrice > 0 ? coin.risk.entryPrice : entry;
+      const stopLoss = bias === 'Long'
+        ? Math.min(entry * 0.985, coin.risk.stopLoss > 0 ? coin.risk.stopLoss : entry * 0.985)
+        : Math.max(entry * 1.015, coin.risk.stopLoss > 0 ? coin.risk.stopLoss : entry * 1.015);
+      const target = bias === 'Long'
+        ? Math.max(entry * 1.03, coin.risk.targetPrice > 0 ? coin.risk.targetPrice : entry * 1.03)
+        : Math.max(0, Math.min(entry * 0.97, coin.risk.targetPrice > 0 ? coin.risk.targetPrice : entry * 0.97));
+
+      return {
+        symbol: coin.symbol,
+        price: coin.price,
+        bias,
+        signalStrength,
+        confidence,
+        confidenceBand,
+        entry,
+        referenceEntry,
+        stopLoss,
+        target,
+        volumeRatio,
+        biggestMove: Math.abs(coin.priceChangePercent),
+      };
+    });
+
+    const filtered = scored.filter((item) => {
+      if (quickSignalConfidenceOnly70 && item.confidence < 70) return false;
+      if (quickSignalVolumeHighOnly && item.volumeRatio < HIGH_VOLUME_RATIO_THRESHOLD) return false;
+      return true;
+    });
+
+    const sorter: Record<QuickSignalSort, (a: (typeof filtered)[number], b: (typeof filtered)[number]) => number> = {
+      confidence: (a, b) => b.confidence - a.confidence,
+      volume: (a, b) => b.volumeRatio - a.volumeRatio,
+      move: (a, b) => b.biggestMove - a.biggestMove,
+    };
+
+    return filtered.sort(sorter[quickSignalSort]).slice(0, 30);
+  }, [coins, quickSignalConfidenceOnly70, quickSignalSort, quickSignalTimeframe, quickSignalVolumeHighOnly]);
+
+  const longQuickSignals = useMemo(() => quickTradeSignals.filter((item) => item.bias === 'Long'), [quickTradeSignals]);
+  const shortQuickSignals = useMemo(() => quickTradeSignals.filter((item) => item.bias === 'Short'), [quickTradeSignals]);
+
+  const liquidationIntelRows = useMemo(() => {
+    const timeframeFactor = liquidationTimeframe === '5m' ? 0.85 : liquidationTimeframe === '1h' ? 1.15 : 1;
+    return liquidationHeatmap
+      .map((item) => {
+        const normalizedImbalance = Math.round(item.imbalance * timeframeFactor * 100) / 100;
+        const signal = signalLabelFromImbalance(normalizedImbalance);
+        const pressure = normalizedImbalance > LIQUIDATION_SIGNAL_THRESHOLD
+          ? 'Bullish'
+          : normalizedImbalance < -LIQUIDATION_SIGNAL_THRESHOLD
+          ? 'Bearish'
+          : 'Neutral';
+        const action = signal === 'LONG' ? 'Buy dip' : signal === 'SHORT' ? 'Sell rally' : 'Wait';
+        const strength = getSignalStrength(Math.round(Math.min(99, Math.abs(normalizedImbalance) * 100)));
+        const confidence = Math.round(
+          Math.min(
+            99,
+            Math.abs(normalizedImbalance) * LIQUIDATION_CONFIDENCE_IMBALANCE_WEIGHT +
+              item.intensity * LIQUIDATION_CONFIDENCE_INTENSITY_WEIGHT
+          )
+        );
+        return {
+          ...item,
+          normalizedImbalance,
+          signal,
+          pressure,
+          action,
+          strength,
+          confidence,
+          trap: normalizedImbalance > LIQUIDATION_SIGNAL_THRESHOLD ? 'SHORTS' : normalizedImbalance < -LIQUIDATION_SIGNAL_THRESHOLD ? 'LONGS' : 'NONE',
+          squeezeType:
+            item.shortLiquidationPressure > item.longLiquidationPressure * 1.2
+              ? 'Short Squeeze'
+              : item.longLiquidationPressure > item.shortLiquidationPressure * 1.2
+              ? 'Long Squeeze'
+              : 'None',
+        };
+      })
+      .filter((item) => Math.abs(item.normalizedImbalance) >= liquidationMinImbalance)
+      .filter((item) => !liquidationHighOnly || item.intensity >= HIGH_LIQUIDATION_INTENSITY_THRESHOLD)
+      .sort((a, b) => Math.abs(b.normalizedImbalance) - Math.abs(a.normalizedImbalance))
+      .slice(0, 30);
+  }, [liquidationHeatmap, liquidationHighOnly, liquidationMinImbalance, liquidationTimeframe]);
+
   const smartWatchlist = useMemo(
     () =>
       [...coins]
@@ -1048,6 +1284,73 @@ export default function Dashboard() {
         .sort((a, b) => b.aiScore - a.aiScore),
     [coins]
   );
+
+  const toggleNotify = (symbol: string) => {
+    setNotifySymbols((prev) => ({ ...prev, [symbol]: !prev[symbol] }));
+  };
+
+  useEffect(() => {
+    const previous = previousSignalStateRef.current;
+    const next: Record<string, { bias: QuickSignalBias; confidence: number }> = {};
+    const newAlerts: QuickSignalAlert[] = [];
+    const changes: Array<{ symbol: string; change: SignalChangeDirection; confidence: number }> = [];
+
+    for (const signal of quickTradeSignals) {
+      next[signal.symbol] = { bias: signal.bias, confidence: signal.confidence };
+      const prev = previous[signal.symbol];
+
+      if (!notifySymbols[signal.symbol]) continue;
+
+      if (!prev) {
+        newAlerts.push({
+          symbol: signal.symbol,
+          type: 'SIGNAL_APPEARED',
+          message: `${signal.symbol.replace('USDT', '')} signal appeared`,
+          confidence: signal.confidence,
+          bias: signal.bias,
+        });
+        continue;
+      }
+
+      if (prev.bias !== signal.bias) {
+        changes.push({
+          symbol: signal.symbol,
+          change: prev.bias === 'Long' ? 'LONG_TO_SHORT' : 'SHORT_TO_LONG',
+          confidence: signal.confidence,
+        });
+      }
+
+      if (signal.confidence - prev.confidence >= 4) {
+        newAlerts.push({
+          symbol: signal.symbol,
+          type: 'CONFIDENCE_INCREASED',
+          message: `${signal.symbol.replace('USDT', '')} confidence increased`,
+          confidence: signal.confidence,
+          bias: signal.bias,
+        });
+      }
+
+      const entryDistancePct =
+        signal.referenceEntry > 0 ? Math.abs((signal.price - signal.referenceEntry) / signal.referenceEntry) * 100 : 100;
+      if (entryDistancePct <= ENTRY_REACHED_THRESHOLD_PERCENT) {
+        newAlerts.push({
+          symbol: signal.symbol,
+          type: 'ENTRY_REACHED',
+          message: `${signal.symbol.replace('USDT', '')} entry price reached`,
+          confidence: signal.confidence,
+          bias: signal.bias,
+        });
+      }
+    }
+
+    previousSignalStateRef.current = next;
+    if (newAlerts.length > 0) {
+      setSignalAlerts((prev) => [...newAlerts, ...prev].slice(0, 20));
+    }
+    if (changes.length > 0) {
+      setSignalChanges((prev) => [...changes, ...prev].slice(0, 12));
+    }
+  }, [notifySymbols, quickTradeSignals]);
 
   useEffect(() => {
     if (activeTab !== 'patterns') return;
@@ -1096,6 +1399,8 @@ export default function Dashboard() {
     { id: 'patterns', label: 'Patterns' },
     { id: 'suggestions', label: 'Suggestions' },
     { id: 'liquidations', label: 'Liquidations' },
+    { id: 'quicksignals', label: 'Quick Signals' },
+    { id: 'liquidationintel', label: 'Liquidation Intel' },
     { id: 'warnings', label: 'Warnings' },
     { id: 'volumewhales', label: 'Volume & Whales' },
     { id: 'smartwatchlist', label: 'Smart AI Watchlist' },
@@ -1539,6 +1844,344 @@ export default function Dashboard() {
                 );
               })}
             </div>
+          </div>
+        )}
+
+        {activeTab === 'quicksignals' && (
+          <div className="space-y-4">
+            <div className="flex items-center justify-between gap-3 flex-wrap">
+              <h2 className={`${UI_HEADING_CLASS} flex items-center gap-2`}>
+                <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+                Short-Term Trade Signals
+              </h2>
+              <p className={`${UI_SMALL_LABEL_CLASS} text-gray-400`}>Quick Trade Opportunities</p>
+            </div>
+
+            <div className="rounded-lg border border-gray-800 bg-gray-900/70 p-3">
+              <div className="grid grid-cols-1 md:grid-cols-4 gap-2">
+                <label className="flex flex-col gap-1">
+                  <span className={`${UI_SMALL_LABEL_CLASS} text-gray-500`}>Timeframe</span>
+                  <select
+                    value={quickSignalTimeframe}
+                    onChange={(event) => setQuickSignalTimeframe(event.target.value as QuickSignalTimeframe)}
+                    className={`${UI_DATA_TEXT_CLASS} bg-gray-800 border border-gray-700 rounded px-2 py-1.5 text-white`}
+                  >
+                    <option value="5m">5m</option>
+                    <option value="15m">15m</option>
+                    <option value="1h">1h</option>
+                    <option value="4h">4h</option>
+                  </select>
+                </label>
+                <label className="flex flex-col gap-1">
+                  <span className={`${UI_SMALL_LABEL_CLASS} text-gray-500`}>Sort</span>
+                  <select
+                    value={quickSignalSort}
+                    onChange={(event) => setQuickSignalSort(event.target.value as QuickSignalSort)}
+                    className={`${UI_DATA_TEXT_CLASS} bg-gray-800 border border-gray-700 rounded px-2 py-1.5 text-white`}
+                  >
+                    <option value="confidence">Highest confidence</option>
+                    <option value="volume">Highest volume</option>
+                    <option value="move">Biggest move</option>
+                  </select>
+                </label>
+                <label className="flex items-center gap-2 mt-5 md:mt-0">
+                  <input
+                    type="checkbox"
+                    checked={quickSignalConfidenceOnly70}
+                    onChange={(event) => setQuickSignalConfidenceOnly70(event.target.checked)}
+                    className="h-4 w-4 rounded border-gray-600 bg-gray-800 text-cyan-500"
+                  />
+                  <span className={`${UI_DATA_TEXT_CLASS} text-gray-200`}>Confidence 70+ only</span>
+                </label>
+                <label className="flex items-center gap-2 mt-5 md:mt-0">
+                  <input
+                    type="checkbox"
+                    checked={quickSignalVolumeHighOnly}
+                    onChange={(event) => setQuickSignalVolumeHighOnly(event.target.checked)}
+                    className="h-4 w-4 rounded border-gray-600 bg-gray-800 text-cyan-500"
+                  />
+                  <span className={`${UI_DATA_TEXT_CLASS} text-gray-200`}>Volume high only</span>
+                </label>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
+              <section className="rounded-xl border border-green-700/40 bg-green-900/10 p-3 overflow-x-auto">
+                <h3 className={`${UI_SECTION_TITLE_CLASS} text-green-300 mb-2`}>🟢 LONG Opportunities</h3>
+                <table className={`w-full min-w-[900px] ${UI_DATA_TEXT_CLASS}`}>
+                  <thead>
+                    <tr className={`${UI_SMALL_LABEL_CLASS} text-gray-400 border-b border-gray-800`}>
+                      <th className="text-left py-1.5">Coin</th>
+                      <th className="text-right py-1.5">Price</th>
+                      <th className="text-right py-1.5">Signal Strength</th>
+                      <th className="text-right py-1.5">Entry</th>
+                      <th className="text-right py-1.5">SL</th>
+                      <th className="text-right py-1.5">TP</th>
+                      <th className="text-right py-1.5">Confidence</th>
+                      <th className="text-right py-1.5">Bias</th>
+                      <th className="text-right py-1.5">Notify</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {longQuickSignals.map((item) => (
+                      <tr key={`long-${item.symbol}`} className="border-b border-gray-800/60">
+                        <td className="py-1.5 text-gray-100">{item.symbol.replace('USDT', '')}</td>
+                        <td className="py-1.5 text-right text-gray-200">{formatPrice(item.price)}</td>
+                        <td className="py-1.5 text-right">
+                          <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full border ${UI_SMALL_LABEL_CLASS} ${strengthBadgeClass(item.signalStrength)}`}>
+                            {item.signalStrength === 'Strong' ? '🔥' : item.signalStrength === 'Medium' ? '⚡' : '⚠️'} {item.signalStrength}
+                          </span>
+                        </td>
+                        <td className="py-1.5 text-right text-gray-200">{formatPrice(item.entry)}</td>
+                        <td className="py-1.5 text-right text-red-300">{formatPrice(item.stopLoss)}</td>
+                        <td className="py-1.5 text-right text-green-300">{formatPrice(item.target)}</td>
+                        <td className="py-1.5 text-right text-cyan-200">{item.confidence}%</td>
+                        <td className="py-1.5 text-right">
+                          <span className={`inline-flex px-2 py-0.5 rounded border ${UI_SMALL_LABEL_CLASS} ${biasBadgeClass(item.bias)}`}>🟢 Long</span>
+                        </td>
+                        <td className="py-1.5 text-right">
+                          <button
+                            onClick={() => toggleNotify(item.symbol)}
+                            className={`${UI_SMALL_LABEL_CLASS} px-2 py-0.5 rounded border ${notifySymbols[item.symbol] ? 'border-cyan-500 text-cyan-200 bg-cyan-900/30' : 'border-gray-700 text-gray-300 hover:border-gray-500'}`}
+                          >
+                            {notifySymbols[item.symbol] ? 'Notifying' : 'Notify me'}
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </section>
+
+              <section className="rounded-xl border border-rose-700/40 bg-rose-900/10 p-3 overflow-x-auto">
+                <h3 className={`${UI_SECTION_TITLE_CLASS} text-rose-300 mb-2`}>🔴 SHORT Opportunities</h3>
+                <table className={`w-full min-w-[900px] ${UI_DATA_TEXT_CLASS}`}>
+                  <thead>
+                    <tr className={`${UI_SMALL_LABEL_CLASS} text-gray-400 border-b border-gray-800`}>
+                      <th className="text-left py-1.5">Coin</th>
+                      <th className="text-right py-1.5">Price</th>
+                      <th className="text-right py-1.5">Signal Strength</th>
+                      <th className="text-right py-1.5">Entry</th>
+                      <th className="text-right py-1.5">SL</th>
+                      <th className="text-right py-1.5">TP</th>
+                      <th className="text-right py-1.5">Confidence</th>
+                      <th className="text-right py-1.5">Bias</th>
+                      <th className="text-right py-1.5">Notify</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {shortQuickSignals.map((item) => (
+                      <tr key={`short-${item.symbol}`} className="border-b border-gray-800/60">
+                        <td className="py-1.5 text-gray-100">{item.symbol.replace('USDT', '')}</td>
+                        <td className="py-1.5 text-right text-gray-200">{formatPrice(item.price)}</td>
+                        <td className="py-1.5 text-right">
+                          <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full border ${UI_SMALL_LABEL_CLASS} ${strengthBadgeClass(item.signalStrength)}`}>
+                            {item.signalStrength === 'Strong' ? '🔥' : item.signalStrength === 'Medium' ? '⚡' : '⚠️'} {item.signalStrength}
+                          </span>
+                        </td>
+                        <td className="py-1.5 text-right text-gray-200">{formatPrice(item.entry)}</td>
+                        <td className="py-1.5 text-right text-red-300">{formatPrice(item.stopLoss)}</td>
+                        <td className="py-1.5 text-right text-green-300">{formatPrice(item.target)}</td>
+                        <td className="py-1.5 text-right text-cyan-200">{item.confidence}%</td>
+                        <td className="py-1.5 text-right">
+                          <span className={`inline-flex px-2 py-0.5 rounded border ${UI_SMALL_LABEL_CLASS} ${biasBadgeClass(item.bias)}`}>🔴 Short</span>
+                        </td>
+                        <td className="py-1.5 text-right">
+                          <button
+                            onClick={() => toggleNotify(item.symbol)}
+                            className={`${UI_SMALL_LABEL_CLASS} px-2 py-0.5 rounded border ${notifySymbols[item.symbol] ? 'border-cyan-500 text-cyan-200 bg-cyan-900/30' : 'border-gray-700 text-gray-300 hover:border-gray-500'}`}
+                          >
+                            {notifySymbols[item.symbol] ? 'Notifying' : 'Notify me'}
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </section>
+            </div>
+
+            <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
+              <div className="rounded-xl border border-indigo-700/40 bg-indigo-900/10 p-3">
+                <h3 className={`${UI_SECTION_TITLE_CLASS} text-indigo-200 mb-2`}>Trade Confidence Score</h3>
+                <p className={`${UI_DATA_TEXT_CLASS} text-gray-300`}>
+                  0–50 Avoid · 50–70 Risky · 70–85 Good · 85+ Strong trade
+                </p>
+                <p className={`${UI_SMALL_LABEL_CLASS} text-gray-400 mt-1`}>
+                  Score = RSI weight + Volume weight + Trend weight + Support/Resistance proximity
+                </p>
+              </div>
+              <div className="rounded-xl border border-cyan-700/40 bg-cyan-900/10 p-3">
+                <h3 className={`${UI_SECTION_TITLE_CLASS} text-cyan-200 mb-2`}>Signal Change Detector</h3>
+                {signalChanges.length === 0 ? (
+                  <p className={`${UI_DATA_TEXT_CLASS} text-gray-400`}>No LONG/SHORT flips detected yet.</p>
+                ) : (
+                  <div className="space-y-1.5">
+                    {signalChanges.slice(0, 8).map((change) => (
+                      <p key={`${change.symbol}-${change.change}`} className={`${UI_DATA_TEXT_CLASS} text-gray-200`}>
+                        {change.symbol.replace('USDT', '')}: {change.change === 'LONG_TO_SHORT' ? 'LONG → SHORT' : 'SHORT → LONG'} · {change.confidence}%
+                      </p>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+
+            <div className="rounded-xl border border-gray-800 bg-gray-900/60 p-3">
+              <h3 className={`${UI_SECTION_TITLE_CLASS} text-gray-100 mb-2`}>Alerts</h3>
+              {signalAlerts.length === 0 ? (
+                <p className={`${UI_DATA_TEXT_CLASS} text-gray-400`}>Enable “Notify me” on coins to get signal alerts.</p>
+              ) : (
+                <div className="space-y-1.5">
+                  {signalAlerts.slice(0, 10).map((alert, index) => (
+                    <p key={`${alert.symbol}-${alert.type}-${index}`} className={`${UI_DATA_TEXT_CLASS} text-gray-200`}>
+                      {alert.bias === 'Long' ? '🟢' : '🔴'} {alert.message} · {alert.confidence}%
+                    </p>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
+        {activeTab === 'liquidationintel' && (
+          <div className="space-y-4">
+            <div className="flex items-center justify-between gap-3 flex-wrap">
+              <h2 className={`${UI_HEADING_CLASS} flex items-center gap-2`}>
+                <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse" />
+                Liquidation Intelligence
+              </h2>
+              <p className={`${UI_SMALL_LABEL_CLASS} text-gray-400`}>Clear pressure, signal, and action</p>
+            </div>
+
+            <div className="rounded-lg border border-gray-800 bg-gray-900/70 p-3">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
+                <label className="flex flex-col gap-1">
+                  <span className={`${UI_SMALL_LABEL_CLASS} text-gray-500`}>Timeframe</span>
+                  <select
+                    value={liquidationTimeframe}
+                    onChange={(event) => setLiquidationTimeframe(event.target.value as '5m' | '15m' | '1h')}
+                    className={`${UI_DATA_TEXT_CLASS} bg-gray-800 border border-gray-700 rounded px-2 py-1.5 text-white`}
+                  >
+                    <option value="5m">5m</option>
+                    <option value="15m">15m</option>
+                    <option value="1h">1h</option>
+                  </select>
+                </label>
+                <label className="flex flex-col gap-1">
+                  <span className={`${UI_SMALL_LABEL_CLASS} text-gray-500`}>Imbalance threshold</span>
+                  <select
+                    value={liquidationMinImbalance}
+                    onChange={(event) => setLiquidationMinImbalance(Number(event.target.value))}
+                    className={`${UI_DATA_TEXT_CLASS} bg-gray-800 border border-gray-700 rounded px-2 py-1.5 text-white`}
+                  >
+                    <option value={0.3}>0.3+ only</option>
+                    <option value={0.5}>0.5+ only</option>
+                    <option value={0.8}>0.8+ only</option>
+                  </select>
+                </label>
+                <label className="flex items-center gap-2 mt-5 md:mt-0">
+                  <input
+                    type="checkbox"
+                    checked={liquidationHighOnly}
+                    onChange={(event) => setLiquidationHighOnly(event.target.checked)}
+                    className="h-4 w-4 rounded border-gray-600 bg-gray-800 text-cyan-500"
+                  />
+                  <span className={`${UI_DATA_TEXT_CLASS} text-gray-200`}>High liquidation size only</span>
+                </label>
+              </div>
+            </div>
+
+            {liquidationIntelRows.length > 0 && (
+              <div className="rounded-xl border border-gray-700 bg-gray-900/70 p-4">
+                {(() => {
+                  const top = liquidationIntelRows[0];
+                  const topSignal = top.signal;
+                  const isBullish = top.normalizedImbalance > LIQUIDATION_SIGNAL_THRESHOLD;
+                  const maxLiq = Math.max(top.longLiquidationPressure, top.shortLiquidationPressure, 1);
+                  const longBar = liquidationVisualBar(top.longLiquidationPressure, maxLiq);
+                  const shortBar = liquidationVisualBar(top.shortLiquidationPressure, maxLiq);
+                  return (
+                    <div className="space-y-2">
+                      <h3 className={`${UI_SECTION_TITLE_CLASS} text-white`}>🧠 Liquidation Overview Card · {top.symbol.replace('USDT', '')}</h3>
+                      <p className={`${UI_DATA_TEXT_CLASS} ${pressureColorFromImbalance(top.normalizedImbalance)}`}>
+                        Market Pressure: {top.pressure} · {top.squeezeType === 'Short Squeeze' ? '🔥 Short Squeeze Detected' : top.squeezeType === 'Long Squeeze' ? '💣 Long Squeeze Detected' : '🟡 No squeeze'}
+                      </p>
+                      <p className={`${UI_DATA_TEXT_CLASS} text-gray-200`}>
+                        Short Liquidations: {top.shortLiquidationPressure.toFixed(2)} · Long Liquidations: {top.longLiquidationPressure.toFixed(2)}
+                      </p>
+                      <p className={`${UI_DATA_TEXT_CLASS} ${pressureColorFromImbalance(top.normalizedImbalance)}`}>{pressureLabel(top.normalizedImbalance)}</p>
+                      <p className={`${UI_DATA_TEXT_CLASS} text-gray-300`}>
+                        💡 Insight: {isBullish ? 'More short traders are getting liquidated → price moving up strongly' : 'More long traders are getting liquidated → downside pressure is dominant'}
+                      </p>
+                      <p className={`${UI_DATA_TEXT_CLASS} text-gray-300`}>
+                        📈 Bias: {isBullish ? 'Bullish (Short-term)' : 'Bearish (Short-term)'}
+                      </p>
+                      <p className={`${UI_DATA_TEXT_CLASS} text-gray-300`}>
+                        ⚠️ Strategy: {isBullish ? 'Look for LONG opportunities on pullbacks' : 'Look for SHORT opportunities on relief rallies'}
+                      </p>
+                      <div className="rounded-lg border border-gray-800 bg-gray-950/60 p-2">
+                        <p className={`${UI_SECTION_TITLE_CLASS} text-cyan-200 mb-1`}>🚀 Trade Signal</p>
+                        <p className={`${UI_DATA_TEXT_CLASS} text-gray-200`}>
+                          Type: {topSignal === 'LONG' ? '🟢 LONG' : topSignal === 'SHORT' ? '🔴 SHORT' : '🟡 WAIT'} · Strength: {top.strength} · Confidence: {top.confidence}%
+                        </p>
+                      </div>
+                      <div className="rounded-lg border border-gray-800 bg-gray-950/60 p-2">
+                        <p className={`${UI_DATA_TEXT_CLASS} text-gray-200 font-mono`}>Long Liq&nbsp;&nbsp;&nbsp;{longBar} ({top.longLiquidationPressure.toFixed(2)})</p>
+                        <p className={`${UI_DATA_TEXT_CLASS} text-gray-200 font-mono`}>Short Liq&nbsp;&nbsp;{shortBar} ({top.shortLiquidationPressure.toFixed(2)})</p>
+                      </div>
+                      <p className={`${UI_DATA_TEXT_CLASS} text-yellow-200`}>
+                        {top.trap === 'SHORTS'
+                          ? '⚠️ Traders Trapped: SHORTS · Market likely to continue upward'
+                          : top.trap === 'LONGS'
+                          ? '⚠️ Traders Trapped: LONGS · Market likely to drop further'
+                          : '⚠️ No strong trap detected'}
+                      </p>
+                    </div>
+                  );
+                })()}
+              </div>
+            )}
+
+            <section className="rounded-xl border border-gray-800 bg-gray-900/70 p-3 overflow-x-auto">
+              <h3 className={`${UI_SECTION_TITLE_CLASS} text-white mb-2`}>🧾 Multi-Coin Liquidation Scan</h3>
+              <table className={`w-full min-w-[920px] ${UI_DATA_TEXT_CLASS}`}>
+                <thead>
+                  <tr className={`${UI_SMALL_LABEL_CLASS} text-gray-400 border-b border-gray-800`}>
+                    <th className="text-left py-1.5">Coin</th>
+                    <th className="text-left py-1.5">Pressure</th>
+                    <th className="text-left py-1.5">Signal</th>
+                    <th className="text-right py-1.5">Imbalance</th>
+                    <th className="text-left py-1.5">Action</th>
+                    <th className="text-left py-1.5">Alert Type</th>
+                    <th className="text-left py-1.5">Trap Detection</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {liquidationIntelRows.map((item) => (
+                    <tr key={`intel-${item.symbol}`} className="border-b border-gray-800/60">
+                      <td className="py-1.5 text-gray-100">{item.symbol.replace('USDT', '')}</td>
+                      <td className={`py-1.5 ${pressureColorFromImbalance(item.normalizedImbalance)}`}>
+                        {item.normalizedImbalance > LIQUIDATION_SIGNAL_THRESHOLD ? '🟢 Bullish' : item.normalizedImbalance < -LIQUIDATION_SIGNAL_THRESHOLD ? '🔴 Bearish' : '🟡 Neutral'}
+                      </td>
+                      <td className={`py-1.5 ${pressureColorFromImbalance(item.normalizedImbalance)}`}>
+                        {item.signal === 'LONG' ? 'LONG' : item.signal === 'SHORT' ? 'SHORT' : 'WAIT'}
+                      </td>
+                      <td className={`py-1.5 text-right ${pressureColorFromImbalance(item.normalizedImbalance)}`}>
+                        {item.normalizedImbalance >= 0 ? '+' : ''}{item.normalizedImbalance.toFixed(2)}
+                      </td>
+                      <td className="py-1.5 text-gray-200">{item.action}</td>
+                      <td className="py-1.5 text-gray-200">
+                        {item.squeezeType === 'Short Squeeze' ? '🔥 Short Squeeze' : item.squeezeType === 'Long Squeeze' ? '💣 Long Squeeze' : '—'}
+                      </td>
+                      <td className="py-1.5 text-yellow-200">
+                        {item.trap === 'SHORTS' ? 'SHORTS trapped' : item.trap === 'LONGS' ? 'LONGS trapped' : 'No trap'}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </section>
           </div>
         )}
 
