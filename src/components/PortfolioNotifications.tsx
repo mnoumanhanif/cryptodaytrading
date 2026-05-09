@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
   PortfolioNotification,
   PortfolioNotificationFilter,
@@ -21,21 +21,42 @@ function priorityBadge(priority: PortfolioNotificationPriority): string {
     : 'border-cyan-500/40 bg-cyan-500/10 text-cyan-200';
 }
 
+function displaySymbol(symbol: string): string {
+  return symbol.endsWith('USDT') ? symbol.slice(0, -4) : symbol;
+}
+
 export default function PortfolioNotifications({
   notifications,
   onMarkAsRead,
   onMarkAllAsRead,
+  symbols,
 }: {
   notifications: PortfolioNotification[];
   onMarkAsRead: (id: string) => void;
   onMarkAllAsRead: () => void;
+  symbols?: string[];
 }) {
   const [filter, setFilter] = useState<PortfolioNotificationFilter>('ALL');
+  const [symbolFilter, setSymbolFilter] = useState('ALL');
+
+  const availableSymbols = useMemo(() => {
+    const source = symbols && symbols.length > 0 ? symbols : notifications.map((item) => item.symbol);
+    return Array.from(new Set(source)).sort();
+  }, [notifications, symbols]);
+
+  useEffect(() => {
+    // Reset to "ALL" when the selected coin is no longer available in the latest symbol list.
+    if (symbolFilter === 'ALL') return;
+    if (!availableSymbols.includes(symbolFilter)) {
+      setSymbolFilter('ALL');
+    }
+  }, [availableSymbols, symbolFilter]);
 
   const filtered = useMemo(() => {
-    if (filter === 'ALL') return notifications;
-    return notifications.filter((item) => item.type === filter);
-  }, [filter, notifications]);
+    const byType = filter === 'ALL' ? notifications : notifications.filter((item) => item.type === filter);
+    if (symbolFilter === 'ALL') return byType;
+    return byType.filter((item) => item.symbol === symbolFilter);
+  }, [filter, notifications, symbolFilter]);
 
   return (
     <div className="rounded-xl border border-gray-800 bg-gray-900/60 p-3 md:p-4 space-y-3">
@@ -52,6 +73,18 @@ export default function PortfolioNotifications({
             <option value="SHORT">SHORT</option>
             <option value="RISK">RISK</option>
             <option value="SQUEEZE">SQUEEZE</option>
+          </select>
+          <select
+            value={symbolFilter}
+            onChange={(event) => setSymbolFilter(event.target.value)}
+            className="text-xs bg-gray-800 border border-gray-700 rounded px-2 py-1 text-gray-100"
+          >
+            <option value="ALL">All Coins</option>
+            {availableSymbols.map((symbol) => (
+              <option key={symbol} value={symbol}>
+                {displaySymbol(symbol)}
+              </option>
+            ))}
           </select>
           <button
             onClick={onMarkAllAsRead}
@@ -77,7 +110,7 @@ export default function PortfolioNotifications({
                   <div>
                     <p className="text-[11px] text-gray-400">{new Date(item.createdAt).toLocaleTimeString()}</p>
                     <p className="text-sm text-gray-100">
-                      {meta.icon} {meta.label} — {item.symbol.replace('USDT', '')}
+                      {meta.icon} {meta.label} — {displaySymbol(item.symbol)}
                       {typeof item.confidence === 'number' ? ` (${item.confidence}%)` : ''}
                     </p>
                     <p className="text-xs text-gray-300 mt-0.5">{item.reason}</p>
