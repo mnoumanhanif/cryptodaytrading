@@ -1640,13 +1640,13 @@ export default function Dashboard() {
         detail: `${leadSignal.volumeRatio.toFixed(2)}x`,
       },
       {
-        label: `Risk : Reward ≥ ${MIN_RR_FIRST_TRADE.toFixed(1)}`,
+        label: `Risk:Reward ratio ≥ 1:${MIN_RR_FIRST_TRADE.toFixed(1)}`,
         pass: leadSignal.riskRewardRatio >= MIN_RR_FIRST_TRADE,
         critical: true,
         detail: `1:${leadSignal.riskRewardRatio.toFixed(2)}`,
       },
       {
-        label: 'Market regime or trend supports setup',
+        label: 'Trend aligns with bias OR market regime is TRENDING',
         pass: trendAligned || regimeSupportive,
         critical: true,
         detail: `${leadSignal.marketRegime} · ${leadSignal.trend}`,
