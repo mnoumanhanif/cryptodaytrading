@@ -34,7 +34,10 @@ function getResistance(coin: CoinAnalysis): number {
 }
 
 function getEntry(coin: CoinAnalysis): number {
-  if (coin.risk.entryPrice > 0) return coin.risk.entryPrice;
+  if (coin.risk.entryPrice > 0) {
+    const driftPercent = coin.price > 0 ? Math.abs(((coin.risk.entryPrice - coin.price) / coin.price) * 100) : 0;
+    if (driftPercent <= 15) return coin.risk.entryPrice;
+  }
   const { entryZoneLow, entryZoneHigh } = coin.tradeSignal;
   if (entryZoneLow > 0 && entryZoneHigh > 0) {
     return (entryZoneLow + entryZoneHigh) / 2;
@@ -70,11 +73,17 @@ export default function AiDecisionBoard() {
       .slice(0, MAX_DECISIONS)
       .map((coin) => {
         const entry = getEntry(coin);
-        const stopLoss = coin.risk.stopLoss;
-        const target = coin.risk.targetPrice;
         const support = getSupport(coin);
         const resistance = getResistance(coin);
         const moveDirection = getMoveDirection(coin);
+        const rawTarget = coin.risk.targetPrice;
+        const rawStopLoss = coin.risk.stopLoss;
+        const target = moveDirection === 'UP'
+          ? Math.max(rawTarget, entry > 0 ? entry * 1.01 : rawTarget)
+          : Math.min(rawTarget, support > 0 ? support : entry * 0.99);
+        const stopLoss = moveDirection === 'UP'
+          ? Math.min(rawStopLoss, support > 0 ? support : entry * 0.99)
+          : Math.max(rawStopLoss, resistance > 0 ? resistance : entry * 1.01);
         const moveToTargetPercent = entry > 0
           ? moveDirection === 'UP'
             ? Math.max(0, ((target - entry) / entry) * 100)
@@ -183,7 +192,7 @@ export default function AiDecisionBoard() {
                   <div className="rounded bg-gray-800/60 px-2 py-1.5"><p className="text-gray-400">Stop Loss</p><p className="text-red-400 font-mono">{formatPrice(item.stopLoss)}</p></div>
                   <div className="rounded bg-gray-800/60 px-2 py-1.5"><p className="text-gray-400">Support</p><p className="text-cyan-300 font-mono">{formatPrice(item.support)}</p></div>
                   <div className="rounded bg-gray-800/60 px-2 py-1.5"><p className="text-gray-400">Resistance</p><p className="text-yellow-300 font-mono">{formatPrice(item.resistance)}</p></div>
-                  <div className="rounded bg-gray-800/60 px-2 py-1.5"><p className="text-gray-400">Move %</p><p className="text-emerald-300 font-mono">{item.moveToTargetPercent.toFixed(2)}%</p></div>
+                  <div className="rounded bg-gray-800/60 px-2 py-1.5"><p className="text-gray-400">Target Move %</p><p className="text-emerald-300 font-mono">{item.moveToTargetPercent.toFixed(2)}%</p></div>
                   <div className="rounded bg-gray-800/60 px-2 py-1.5"><p className="text-gray-400">Risk / R:R</p><p className="text-white font-mono">{item.riskToStopPercent.toFixed(2)}% / 1:{item.riskRewardRatio.toFixed(2)}</p></div>
                 </div>
               </div>
