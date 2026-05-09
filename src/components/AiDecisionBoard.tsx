@@ -8,6 +8,13 @@ import { CoinAnalysis } from '@/lib/types';
 const MAX_DECISIONS = 12;
 const MIN_CONFIDENCE = 60;
 const MIN_VOLUME_RATIO = 1.2;
+const RANK_CONFIDENCE_WEIGHT = 0.4;
+const RANK_SCORE_WEIGHT = 0.3;
+const RANK_VOLUME_WEIGHT = 0.2;
+const RANK_MOVE_WEIGHT = 0.1;
+const VOLUME_RATIO_TO_SCORE = 30;
+const MOVE_PERCENT_TO_SCORE = 8;
+const RANK_SCORE_CAP = 100;
 
 function getMoveDirection(coin: CoinAnalysis): 'UP' | 'DOWN' {
   const trend = coin.indicators.ma.trend;
@@ -28,7 +35,11 @@ function getResistance(coin: CoinAnalysis): number {
 
 function getEntry(coin: CoinAnalysis): number {
   if (coin.risk.entryPrice > 0) return coin.risk.entryPrice;
-  return (coin.tradeSignal.entryZoneLow + coin.tradeSignal.entryZoneHigh) / 2;
+  const { entryZoneLow, entryZoneHigh } = coin.tradeSignal;
+  if (entryZoneLow > 0 && entryZoneHigh > 0) {
+    return (entryZoneLow + entryZoneHigh) / 2;
+  }
+  return coin.price;
 }
 
 function rankCoin(coin: CoinAnalysis): number {
@@ -37,7 +48,12 @@ function rankCoin(coin: CoinAnalysis): number {
   const volumeRatio = coin.indicators.volume?.volumeRatio ?? 0;
   const move = Math.abs(coin.priceChangePercent);
 
-  return confidence * 0.4 + score * 0.3 + Math.min(volumeRatio * 30, 100) * 0.2 + Math.min(move * 8, 100) * 0.1;
+  return (
+    confidence * RANK_CONFIDENCE_WEIGHT +
+    score * RANK_SCORE_WEIGHT +
+    Math.min(volumeRatio * VOLUME_RATIO_TO_SCORE, RANK_SCORE_CAP) * RANK_VOLUME_WEIGHT +
+    Math.min(move * MOVE_PERCENT_TO_SCORE, RANK_SCORE_CAP) * RANK_MOVE_WEIGHT
+  );
 }
 
 export default function AiDecisionBoard() {
@@ -59,8 +75,16 @@ export default function AiDecisionBoard() {
         const support = getSupport(coin);
         const resistance = getResistance(coin);
         const moveDirection = getMoveDirection(coin);
-        const moveToTargetPercent = entry > 0 ? Math.abs(((target - entry) / entry) * 100) : 0;
-        const riskToStopPercent = entry > 0 ? Math.abs(((entry - stopLoss) / entry) * 100) : 0;
+        const moveToTargetPercent = entry > 0
+          ? moveDirection === 'UP'
+            ? Math.max(0, ((target - entry) / entry) * 100)
+            : Math.max(0, ((entry - target) / entry) * 100)
+          : 0;
+        const riskToStopPercent = entry > 0
+          ? moveDirection === 'UP'
+            ? Math.max(0, ((entry - stopLoss) / entry) * 100)
+            : Math.max(0, ((stopLoss - entry) / entry) * 100)
+          : 0;
 
         return {
           symbol: coin.symbol,
