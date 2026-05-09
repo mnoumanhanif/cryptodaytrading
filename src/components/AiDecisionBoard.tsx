@@ -35,14 +35,51 @@ function getResistance(coin: CoinAnalysis): number {
 
 function getEntry(coin: CoinAnalysis): number {
   if (coin.risk.entryPrice > 0) {
-    const driftPercent = coin.price > 0 ? Math.abs(((coin.risk.entryPrice - coin.price) / coin.price) * 100) : 0;
-    if (driftPercent <= 15) return coin.risk.entryPrice;
+    const entryDeviationPercent = coin.price > 0 ? Math.abs(((coin.risk.entryPrice - coin.price) / coin.price) * 100) : 0;
+    if (entryDeviationPercent <= 15) return coin.risk.entryPrice;
   }
   const { entryZoneLow, entryZoneHigh } = coin.tradeSignal;
   if (entryZoneLow > 0 && entryZoneHigh > 0) {
     return (entryZoneLow + entryZoneHigh) / 2;
   }
   return coin.price;
+}
+
+function normalizeTradeLevels(
+  entry: number,
+  rawTarget: number,
+  rawStopLoss: number,
+  moveDirection: 'UP' | 'DOWN',
+  support: number,
+  resistance: number
+): { target: number; stopLoss: number } {
+  if (moveDirection === 'UP') {
+    const target = Math.max(rawTarget, entry * 1.01);
+    const stopLoss = Math.min(rawStopLoss, support > 0 ? support : entry * 0.99);
+    return {
+      target,
+      stopLoss: stopLoss < entry ? stopLoss : entry * 0.99,
+    };
+  }
+
+  const targetCandidates = [rawTarget, support, entry * 0.99].filter((value) => Number.isFinite(value) && value > 0 && value < entry);
+  const stopCandidates = [rawStopLoss, resistance, entry * 1.01].filter((value) => Number.isFinite(value) && value > entry);
+  return {
+    target: targetCandidates.length > 0 ? Math.min(...targetCandidates) : entry * 0.99,
+    stopLoss: stopCandidates.length > 0 ? Math.max(...stopCandidates) : entry * 1.01,
+  };
+}
+
+function calculateMoveToTargetPercent(entry: number, target: number, moveDirection: 'UP' | 'DOWN'): number {
+  if (entry <= 0) return 0;
+  const raw = moveDirection === 'UP' ? ((target - entry) / entry) * 100 : ((entry - target) / entry) * 100;
+  return Math.max(0, raw);
+}
+
+function calculateRiskToStopPercent(entry: number, stopLoss: number, moveDirection: 'UP' | 'DOWN'): number {
+  if (entry <= 0) return 0;
+  const raw = moveDirection === 'UP' ? ((entry - stopLoss) / entry) * 100 : ((stopLoss - entry) / entry) * 100;
+  return Math.max(0, raw);
 }
 
 function rankCoin(coin: CoinAnalysis): number {
@@ -78,22 +115,9 @@ export default function AiDecisionBoard() {
         const moveDirection = getMoveDirection(coin);
         const rawTarget = coin.risk.targetPrice;
         const rawStopLoss = coin.risk.stopLoss;
-        const target = moveDirection === 'UP'
-          ? Math.max(rawTarget, entry > 0 ? entry * 1.01 : rawTarget)
-          : Math.min(rawTarget, support > 0 ? support : entry * 0.99);
-        const stopLoss = moveDirection === 'UP'
-          ? Math.min(rawStopLoss, support > 0 ? support : entry * 0.99)
-          : Math.max(rawStopLoss, resistance > 0 ? resistance : entry * 1.01);
-        const moveToTargetPercent = entry > 0
-          ? moveDirection === 'UP'
-            ? Math.max(0, ((target - entry) / entry) * 100)
-            : Math.max(0, ((entry - target) / entry) * 100)
-          : 0;
-        const riskToStopPercent = entry > 0
-          ? moveDirection === 'UP'
-            ? Math.max(0, ((entry - stopLoss) / entry) * 100)
-            : Math.max(0, ((stopLoss - entry) / entry) * 100)
-          : 0;
+        const { target, stopLoss } = normalizeTradeLevels(entry, rawTarget, rawStopLoss, moveDirection, support, resistance);
+        const moveToTargetPercent = calculateMoveToTargetPercent(entry, target, moveDirection);
+        const riskToStopPercent = calculateRiskToStopPercent(entry, stopLoss, moveDirection);
 
         return {
           symbol: coin.symbol,
