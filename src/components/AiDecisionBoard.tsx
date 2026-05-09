@@ -64,7 +64,7 @@ type DecisionItem = {
   expectedLossPercent: number;
   riskRewardRatio: number;
   whaleConfidence: number;
-  whaleEstimatedUsd: number;
+  estimatedVolumeUsd: number;
   socialTrendScore: number;
   attentionScore: number;
   rankScore: number;
@@ -240,7 +240,7 @@ export default function AiDecisionBoard() {
         const expectedLossPercent = calculateRiskToStopPercent(entry, stopLoss, moveDirection);
         const whaleConfidence = getWhaleConfidence(coin);
         const socialTrendScore = getSocialTrendScore(coin);
-        const item: DecisionItem = {
+        const baseItem = {
           symbol: coin.symbol,
           bias: getBias(coin),
           confidence: coin.tradeSignal.confidence,
@@ -257,19 +257,25 @@ export default function AiDecisionBoard() {
           expectedLossPercent,
           riskRewardRatio: coin.risk.riskRewardRatio,
           whaleConfidence,
-          whaleEstimatedUsd: getWhaleEstimatedUsd(coin),
+          estimatedVolumeUsd: getWhaleEstimatedUsd(coin),
           socialTrendScore,
-          // Attention score is the headline "watch now" reading that blends flow quality with crowd momentum.
-          attentionScore: Math.round(whaleConfidence * ATTENTION_WHALE_WEIGHT + socialTrendScore * ATTENTION_SOCIAL_WEIGHT),
           marketRegime: coin.tradeSignal.market_regime,
           keyFactors: coin.tradeSignal.key_factors,
           riskFlags: coin.tradeSignal.risk_flags,
           isWhalePickup: whaleConfidence >= WHALE_PICKUP_THRESHOLD,
           isSocialTrend: socialTrendScore >= SOCIAL_TREND_THRESHOLD,
-          rankScore: 0,
         };
 
-        return { ...item, rankScore: getDecisionRank(item) };
+        const attentionScore = clampScore(
+          Math.round(baseItem.whaleConfidence * ATTENTION_WHALE_WEIGHT + baseItem.socialTrendScore * ATTENTION_SOCIAL_WEIGHT)
+        );
+        const rankScore = getDecisionRank(baseItem);
+
+        return {
+          ...baseItem,
+          attentionScore,
+          rankScore,
+        } satisfies DecisionItem;
       });
   }, [coins]);
 
@@ -297,7 +303,7 @@ export default function AiDecisionBoard() {
 
   const whaleRadar = useMemo(
     () =>
-      [...allDecisions]
+      allDecisions
         .filter((item) => item.isWhalePickup && item.isSocialTrend)
         .sort((a, b) => b.attentionScore - a.attentionScore)
         .slice(0, 4),
@@ -441,7 +447,7 @@ export default function AiDecisionBoard() {
             <p className="mt-2 text-sm leading-6 text-gray-300">
               Whale flow and social trend are professional market-attention proxies generated from live volume surges, price expansion,
               and signal confidence. They highlight likely institutional pickup and crowd attention without claiming direct third-party
-              social API coverage.
+              social API coverage, and they should be treated as heuristics rather than guaranteed predictors of future price movement.
             </p>
           </div>
         </section>
@@ -512,7 +518,7 @@ export default function AiDecisionBoard() {
                     <p>Attention score: <span className="font-medium text-white">{item.attentionScore}/100</span></p>
                     <p>Whale flow: <span className="font-medium text-cyan-300">{item.whaleConfidence}/100</span></p>
                     <p>Social trend: <span className="font-medium text-violet-300">{item.socialTrendScore}/100</span></p>
-                    <p>Estimated whale size: <span className="font-medium text-white">{formatVolume(item.whaleEstimatedUsd)}</span></p>
+                    <p>Estimated volume USD: <span className="font-medium text-white">{formatVolume(item.estimatedVolumeUsd)}</span></p>
                   </div>
                 </div>
               ))}
@@ -589,7 +595,7 @@ export default function AiDecisionBoard() {
                         </div>
                       </div>
                       <p className="text-sm text-gray-300">
-                        Estimated whale size <span className="font-medium text-white">{formatVolume(item.whaleEstimatedUsd)}</span>
+                        Estimated volume USD <span className="font-medium text-white">{formatVolume(item.estimatedVolumeUsd)}</span>
                       </p>
                     </div>
                   </div>
