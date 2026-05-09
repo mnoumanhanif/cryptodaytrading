@@ -1646,7 +1646,7 @@ export default function Dashboard() {
         detail: `1:${leadSignal.riskRewardRatio.toFixed(2)}`,
       },
       {
-        label: 'Market regime/trend supports setup',
+        label: 'Market regime or trend supports setup',
         pass: trendAligned || regimeSupportive,
         critical: true,
         detail: `${leadSignal.marketRegime} · ${leadSignal.trend}`,
@@ -1662,7 +1662,7 @@ export default function Dashboard() {
     const passedCount = checks.filter((check) => check.pass).length;
     const hasCriticalFail = checks.some((check) => check.critical && !check.pass);
     const status: 'GO' | 'WATCH' | 'SKIP' =
-      hasCriticalFail || leadSignal.riskFlags.length >= 2
+      hasCriticalFail
         ? 'SKIP'
         : passedCount === checks.length
           ? 'GO'
