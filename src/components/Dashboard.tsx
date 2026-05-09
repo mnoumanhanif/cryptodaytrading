@@ -1575,9 +1575,9 @@ export default function Dashboard() {
       const target = bias === 'Long'
         ? Math.max(entry * 1.03, coin.risk.targetPrice > 0 ? coin.risk.targetPrice : entry * 1.03)
         : Math.max(0, Math.min(entry * 0.97, coin.risk.targetPrice > 0 ? coin.risk.targetPrice : entry * 0.97));
-      const riskAmount = Math.abs(entry - stopLoss);
-      const rewardAmount = Math.abs(target - entry);
-      const riskRewardRatio = riskAmount > 0 ? rewardAmount / riskAmount : 0;
+      const riskAmount = bias === 'Long' ? entry - stopLoss : stopLoss - entry;
+      const rewardAmount = bias === 'Long' ? target - entry : entry - target;
+      const riskRewardRatio = riskAmount > 0 && rewardAmount > 0 ? rewardAmount / riskAmount : 0;
 
       return {
         symbol: coin.symbol,
