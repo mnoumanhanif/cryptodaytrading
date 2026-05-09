@@ -23,6 +23,7 @@ import AddMarketPairModal from './AddMarketPairModal';
 import { usePortfolioNotifications } from '@/hooks/usePortfolioNotifications';
 import { SupportedExchange } from '@/lib/exchangeMarket';
 import { CoinAnalysis } from '@/lib/types';
+import { MIN_CONFIDENCE_THRESHOLD, MIN_RR_FIRST_TRADE, TRENDING_MARKET_REGIME } from '@/lib/tradeDecisionConfig';
 
 type ApiKeyOptionId = SupportedExchange | 'coingecko';
 
@@ -232,6 +233,11 @@ type QuickSignalItem = {
   referenceEntry: number;
   volumeRatio: number;
   biggestMove: number;
+  riskRewardRatio: number;
+  isVolumeHigh: boolean;
+  marketRegime: CoinAnalysis['tradeSignal']['market_regime'];
+  trend: CoinAnalysis['indicators']['ma']['trend'];
+  riskFlags: string[];
 };
 
 type QuickSignalAlertType = 'SIGNAL_APPEARED' | 'CONFIDENCE_INCREASED' | 'ENTRY_REACHED';
@@ -1569,6 +1575,9 @@ export default function Dashboard() {
       const target = bias === 'Long'
         ? Math.max(entry * 1.03, coin.risk.targetPrice > 0 ? coin.risk.targetPrice : entry * 1.03)
         : Math.max(0, Math.min(entry * 0.97, coin.risk.targetPrice > 0 ? coin.risk.targetPrice : entry * 0.97));
+      const riskAmount = bias === 'Long' ? entry - stopLoss : stopLoss - entry;
+      const rewardAmount = bias === 'Long' ? target - entry : entry - target;
+      const riskRewardRatio = riskAmount > 0 && rewardAmount > 0 ? rewardAmount / riskAmount : 0;
 
       return {
         symbol: coin.symbol,
@@ -1583,6 +1592,11 @@ export default function Dashboard() {
         target,
         volumeRatio,
         biggestMove: Math.abs(coin.priceChangePercent),
+        riskRewardRatio,
+        isVolumeHigh: volumeRatio >= HIGH_VOLUME_RATIO_THRESHOLD,
+        marketRegime: coin.tradeSignal.market_regime,
+        trend: coin.indicators.ma.trend,
+        riskFlags: coin.tradeSignal.risk_flags ?? [],
       };
     });
 
@@ -1603,6 +1617,64 @@ export default function Dashboard() {
 
   const longQuickSignals = useMemo(() => quickTradeSignals.filter((item) => item.bias === 'Long'), [quickTradeSignals]);
   const shortQuickSignals = useMemo(() => quickTradeSignals.filter((item) => item.bias === 'Short'), [quickTradeSignals]);
+  const quickSignalChecklist = useMemo(() => {
+    const leadSignal = quickTradeSignals[0];
+    if (!leadSignal) return null;
+
+    const trendAligned = leadSignal.bias === 'Long'
+      ? leadSignal.trend === 'bullish'
+      : leadSignal.trend === 'bearish';
+    const regimeSupportive = leadSignal.marketRegime === TRENDING_MARKET_REGIME;
+
+    const checks = [
+      {
+        label: `Confidence ≥ ${MIN_CONFIDENCE_THRESHOLD}%`,
+        pass: leadSignal.confidence >= MIN_CONFIDENCE_THRESHOLD,
+        critical: true,
+        detail: `${leadSignal.confidence}%`,
+      },
+      {
+        label: `Volume ratio ≥ ${HIGH_VOLUME_RATIO_THRESHOLD.toFixed(1)}x`,
+        pass: leadSignal.isVolumeHigh,
+        critical: false,
+        detail: `${leadSignal.volumeRatio.toFixed(2)}x`,
+      },
+      {
+        label: `Risk:Reward ratio ≥ 1:${MIN_RR_FIRST_TRADE.toFixed(1)}`,
+        pass: leadSignal.riskRewardRatio >= MIN_RR_FIRST_TRADE,
+        critical: true,
+        detail: `1:${leadSignal.riskRewardRatio.toFixed(2)}`,
+      },
+      {
+        label: 'Trend aligns with bias OR market regime is TRENDING',
+        pass: trendAligned || regimeSupportive,
+        critical: true,
+        detail: `${leadSignal.marketRegime} · ${leadSignal.trend}`,
+      },
+      {
+        label: 'Risk flags are clear',
+        pass: leadSignal.riskFlags.length === 0,
+        critical: true,
+        detail: leadSignal.riskFlags.length === 0 ? 'None' : `${leadSignal.riskFlags.length} flag(s)`,
+      },
+    ];
+
+    const passedCount = checks.filter((check) => check.pass).length;
+    const hasCriticalFail = checks.some((check) => check.critical && !check.pass);
+    const status: 'GO' | 'WATCH' | 'SKIP' =
+      hasCriticalFail
+        ? 'SKIP'
+        : passedCount === checks.length
+          ? 'GO'
+          : 'WATCH';
+
+    return {
+      signal: leadSignal,
+      checks,
+      passedCount,
+      status,
+    };
+  }, [quickTradeSignals]);
 
   const marqueeSignals = useMemo(() => {
     const now = Date.now();
@@ -2788,6 +2860,72 @@ export default function Dashboard() {
                 </label>
               </div>
             </div>
+
+            <section
+              className={`rounded-xl border p-3 ${
+                quickSignalChecklist?.status === 'GO'
+                  ? 'border-green-600/40 bg-green-900/10'
+                  : quickSignalChecklist?.status === 'WATCH'
+                    ? 'border-yellow-600/40 bg-yellow-900/10'
+                    : 'border-red-600/40 bg-red-900/10'
+              }`}
+            >
+              <div className="flex items-start justify-between gap-3 flex-wrap">
+                <div>
+                  <h3 className={`${UI_SECTION_TITLE_CLASS} text-white`}>
+                    1-Click Trade Checklist
+                  </h3>
+                  <p className={`${UI_SMALL_LABEL_CLASS} text-gray-300 mt-1`}>
+                    {quickSignalChecklist
+                      ? `Lead setup: ${quickSignalChecklist.signal.symbol.replace('USDT', '')} (${quickSignalChecklist.signal.bias})`
+                      : 'No quick signals available right now.'}
+                  </p>
+                </div>
+                {quickSignalChecklist && (
+                  <div
+                    className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-xs font-semibold ${
+                      quickSignalChecklist.status === 'GO'
+                        ? 'border-green-500/50 bg-green-500/20 text-green-200'
+                        : quickSignalChecklist.status === 'WATCH'
+                          ? 'border-yellow-500/50 bg-yellow-500/20 text-yellow-200'
+                          : 'border-red-500/50 bg-red-500/20 text-red-200'
+                    }`}
+                  >
+                    {quickSignalChecklist.status === 'GO' ? '🟢 GO' : quickSignalChecklist.status === 'WATCH' ? '🟡 WATCH' : '🔴 SKIP'}
+                  </div>
+                )}
+              </div>
+
+              {quickSignalChecklist && (
+                <>
+                  <p className={`${UI_SMALL_LABEL_CLASS} text-gray-400 mt-2`}>
+                    {quickSignalChecklist.passedCount}/{quickSignalChecklist.checks.length} checks passed
+                  </p>
+                  <div className="mt-3 space-y-2">
+                    {quickSignalChecklist.checks.map((check) => (
+                      <div
+                        key={check.label}
+                        className="rounded-lg border border-gray-800/80 bg-gray-950/40 px-2.5 py-2 flex items-center justify-between gap-2"
+                      >
+                        <div>
+                          <p className={`${UI_DATA_TEXT_CLASS} text-gray-100`}>{check.label}</p>
+                          <p className={`${UI_SMALL_LABEL_CLASS} text-gray-400 mt-0.5`}>{check.detail}</p>
+                        </div>
+                        <span
+                          className={`inline-flex min-w-[54px] justify-center rounded-full border px-2 py-0.5 text-[10px] font-semibold ${
+                            check.pass
+                              ? 'border-green-500/50 bg-green-500/20 text-green-200'
+                              : 'border-red-500/50 bg-red-500/20 text-red-200'
+                          }`}
+                        >
+                          {check.pass ? 'PASS' : 'FAIL'}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </>
+              )}
+            </section>
 
             <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
               <section className="rounded-xl border border-green-700/40 bg-green-900/10 p-3 overflow-x-auto">
