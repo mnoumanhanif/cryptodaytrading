@@ -16,13 +16,21 @@ const RANK_PROFIT_WEIGHT = 0.1;
 const RANK_RR_WEIGHT = 0.05;
 const RANK_WHALE_WEIGHT = 0.05;
 const RANK_SOCIAL_WEIGHT = 0.05;
+const ATTENTION_WHALE_WEIGHT = 0.55;
+const ATTENTION_SOCIAL_WEIGHT = 0.45;
 const VOLUME_RATIO_TO_SCORE = 30;
 const MOVE_PERCENT_TO_SCORE = 8;
 const PROFIT_PERCENT_TO_SCORE = 10;
 const RR_TO_SCORE = 25;
 const SCORE_CAP = 100;
+// These cutoffs are intentionally a bit lower than "extreme" readings so the board can surface
+// early institutional accumulation and social acceleration before the move becomes overcrowded.
 const WHALE_PICKUP_THRESHOLD = 72;
 const SOCIAL_TREND_THRESHOLD = 68;
+const HIGH_CONVICTION_CONFIDENCE_THRESHOLD = 75;
+const HIGH_CONVICTION_SCORE_THRESHOLD = 65;
+const ASYMMETRIC_PROFIT_THRESHOLD = 3;
+const ASYMMETRIC_RR_THRESHOLD = 1.8;
 
 type DecisionSort = 'rank' | 'confidence' | 'score' | 'profit' | 'whale' | 'social';
 type BiasFilter = 'ALL' | 'LONG' | 'SHORT';
@@ -56,6 +64,11 @@ type DecisionItem = {
   isWhalePickup: boolean;
   isSocialTrend: boolean;
 };
+
+type RankableDecision = Pick<
+  DecisionItem,
+  'confidence' | 'score' | 'volumeRatio' | 'priceChangePercent' | 'expectedProfitPercent' | 'riskRewardRatio' | 'whaleConfidence' | 'socialTrendScore'
+>;
 
 function getMoveDirection(coin: CoinAnalysis): 'UP' | 'DOWN' {
   const trend = coin.indicators.ma.trend;
@@ -148,7 +161,7 @@ function getSocialTrendScore(coin: CoinAnalysis): number {
   return clampScore(Math.round(raw));
 }
 
-function getDecisionRank(item: Pick<DecisionItem, 'confidence' | 'score' | 'volumeRatio' | 'priceChangePercent' | 'expectedProfitPercent' | 'riskRewardRatio' | 'whaleConfidence' | 'socialTrendScore'>): number {
+function getDecisionRank(item: RankableDecision): number {
   return (
     item.confidence * RANK_CONFIDENCE_WEIGHT +
     item.score * RANK_SCORE_WEIGHT +
@@ -234,7 +247,7 @@ export default function AiDecisionBoard() {
           whaleConfidence,
           whaleEstimatedUsd: getWhaleEstimatedUsd(coin),
           socialTrendScore,
-          attentionScore: Math.round(whaleConfidence * 0.55 + socialTrendScore * 0.45),
+          attentionScore: Math.round(whaleConfidence * ATTENTION_WHALE_WEIGHT + socialTrendScore * ATTENTION_SOCIAL_WEIGHT),
           marketRegime: coin.tradeSignal.market_regime,
           keyFactors: coin.tradeSignal.key_factors,
           riskFlags: coin.tradeSignal.risk_flags,
@@ -252,8 +265,12 @@ export default function AiDecisionBoard() {
       .filter((item) => {
         if (biasFilter !== 'ALL' && item.bias !== biasFilter) return false;
         if (focusFilter === 'WHALE_SOCIAL') return item.isWhalePickup && item.isSocialTrend;
-        if (focusFilter === 'HIGH_CONVICTION') return item.confidence >= 75 && item.score >= 65;
-        if (focusFilter === 'ASYMMETRIC') return item.expectedProfitPercent >= 3 && item.riskRewardRatio >= 1.8;
+        if (focusFilter === 'HIGH_CONVICTION') {
+          return item.confidence >= HIGH_CONVICTION_CONFIDENCE_THRESHOLD && item.score >= HIGH_CONVICTION_SCORE_THRESHOLD;
+        }
+        if (focusFilter === 'ASYMMETRIC') {
+          return item.expectedProfitPercent >= ASYMMETRIC_PROFIT_THRESHOLD && item.riskRewardRatio >= ASYMMETRIC_RR_THRESHOLD;
+        }
         return true;
       })
       .sort((a, b) => {
