@@ -21,6 +21,10 @@ function priorityBadge(priority: PortfolioNotificationPriority): string {
     : 'border-cyan-500/40 bg-cyan-500/10 text-cyan-200';
 }
 
+function displaySymbol(symbol: string): string {
+  return symbol.endsWith('USDT') ? symbol.slice(0, -4) : symbol;
+}
+
 export default function PortfolioNotifications({
   notifications,
   onMarkAsRead,
@@ -34,10 +38,11 @@ export default function PortfolioNotifications({
 }) {
   const [filter, setFilter] = useState<PortfolioNotificationFilter>('ALL');
   const [symbolFilter, setSymbolFilter] = useState('ALL');
+  const symbolSource = symbols && symbols.length > 0 ? symbols : notifications.map((item) => item.symbol);
 
   const availableSymbols = useMemo(
-    () => Array.from(new Set((symbols && symbols.length > 0 ? symbols : notifications.map((item) => item.symbol)))).sort(),
-    [notifications, symbols]
+    () => Array.from(new Set(symbolSource)).sort(),
+    [symbolSource]
   );
 
   useEffect(() => {
@@ -77,7 +82,7 @@ export default function PortfolioNotifications({
             <option value="ALL">All Coins</option>
             {availableSymbols.map((symbol) => (
               <option key={symbol} value={symbol}>
-                {symbol.replace('USDT', '')}
+                {displaySymbol(symbol)}
               </option>
             ))}
           </select>
@@ -105,7 +110,7 @@ export default function PortfolioNotifications({
                   <div>
                     <p className="text-[11px] text-gray-400">{new Date(item.createdAt).toLocaleTimeString()}</p>
                     <p className="text-sm text-gray-100">
-                      {meta.icon} {meta.label} — {item.symbol.replace('USDT', '')}
+                      {meta.icon} {meta.label} — {displaySymbol(item.symbol)}
                       {typeof item.confidence === 'number' ? ` (${item.confidence}%)` : ''}
                     </p>
                     <p className="text-xs text-gray-300 mt-0.5">{item.reason}</p>
