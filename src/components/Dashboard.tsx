@@ -3159,6 +3159,7 @@ export default function Dashboard() {
               notifications={notifications}
               onMarkAsRead={markAsRead}
               onMarkAllAsRead={markAllAsRead}
+              symbols={items.map((item) => item.symbol)}
             />
           </div>
         )}

@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
   PortfolioNotification,
   PortfolioNotificationFilter,
@@ -25,17 +25,33 @@ export default function PortfolioNotifications({
   notifications,
   onMarkAsRead,
   onMarkAllAsRead,
+  symbols,
 }: {
   notifications: PortfolioNotification[];
   onMarkAsRead: (id: string) => void;
   onMarkAllAsRead: () => void;
+  symbols?: string[];
 }) {
   const [filter, setFilter] = useState<PortfolioNotificationFilter>('ALL');
+  const [symbolFilter, setSymbolFilter] = useState('ALL');
+
+  const availableSymbols = useMemo(
+    () => Array.from(new Set((symbols && symbols.length > 0 ? symbols : notifications.map((item) => item.symbol)))).sort(),
+    [notifications, symbols]
+  );
+
+  useEffect(() => {
+    if (symbolFilter === 'ALL') return;
+    if (!availableSymbols.includes(symbolFilter)) {
+      setSymbolFilter('ALL');
+    }
+  }, [availableSymbols, symbolFilter]);
 
   const filtered = useMemo(() => {
-    if (filter === 'ALL') return notifications;
-    return notifications.filter((item) => item.type === filter);
-  }, [filter, notifications]);
+    const byType = filter === 'ALL' ? notifications : notifications.filter((item) => item.type === filter);
+    if (symbolFilter === 'ALL') return byType;
+    return byType.filter((item) => item.symbol === symbolFilter);
+  }, [filter, notifications, symbolFilter]);
 
   return (
     <div className="rounded-xl border border-gray-800 bg-gray-900/60 p-3 md:p-4 space-y-3">
@@ -52,6 +68,18 @@ export default function PortfolioNotifications({
             <option value="SHORT">SHORT</option>
             <option value="RISK">RISK</option>
             <option value="SQUEEZE">SQUEEZE</option>
+          </select>
+          <select
+            value={symbolFilter}
+            onChange={(event) => setSymbolFilter(event.target.value)}
+            className="text-xs bg-gray-800 border border-gray-700 rounded px-2 py-1 text-gray-100"
+          >
+            <option value="ALL">All Coins</option>
+            {availableSymbols.map((symbol) => (
+              <option key={symbol} value={symbol}>
+                {symbol.replace('USDT', '')}
+              </option>
+            ))}
           </select>
           <button
             onClick={onMarkAllAsRead}
