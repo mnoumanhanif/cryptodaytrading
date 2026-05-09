@@ -2120,6 +2120,14 @@ export default function Dashboard() {
               )}
             </div>
 
+            <a
+              href="/decisions"
+              className="px-2.5 py-1.5 rounded bg-cyan-600/90 hover:bg-cyan-500 transition-colors text-xs font-medium text-white"
+              title="Open AI Decisions page"
+            >
+              AI Decisions
+            </a>
+
             <button
               onClick={() => void refetch(trackedCustomSymbols)}
               disabled={loading}
