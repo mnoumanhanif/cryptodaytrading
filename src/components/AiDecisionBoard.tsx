@@ -31,6 +31,16 @@ const HIGH_CONVICTION_CONFIDENCE_THRESHOLD = 75;
 const HIGH_CONVICTION_SCORE_THRESHOLD = 65;
 const ASYMMETRIC_PROFIT_THRESHOLD = 3;
 const ASYMMETRIC_RR_THRESHOLD = 1.8;
+// These weights produce internal attention proxies only; they are designed to reward
+// unusual flow, directional expansion, and already-strong trade confidence.
+const WHALE_VOLUME_RATIO_WEIGHT = 28;
+const WHALE_MOVE_WEIGHT = 3;
+const WHALE_VOLUME_SPIKE_BONUS = 12;
+const WHALE_CONFIDENCE_WEIGHT = 0.18;
+const SOCIAL_MOVE_WEIGHT = 8;
+const SOCIAL_VOLUME_RATIO_WEIGHT = 18;
+const SOCIAL_CONFIDENCE_WEIGHT = 0.25;
+const SOCIAL_DIRECTIONAL_SIGNAL_BONUS = 6;
 
 type DecisionSort = 'rank' | 'confidence' | 'score' | 'profit' | 'whale' | 'social';
 type BiasFilter = 'ALL' | 'LONG' | 'SHORT';
@@ -144,20 +154,22 @@ function getWhaleEstimatedUsd(coin: CoinAnalysis): number {
 }
 
 function getWhaleConfidence(coin: CoinAnalysis): number {
+  // Whale flow is a proxy derived from live participation intensity, not direct wallet tracking.
   const raw =
-    (coin.indicators.volume?.volumeRatio ?? 0) * 28 +
-    Math.abs(coin.priceChangePercent) * 3 +
-    (coin.indicators.volume?.spike ? 12 : 0) +
-    coin.tradeSignal.confidence * 0.18;
+    (coin.indicators.volume?.volumeRatio ?? 0) * WHALE_VOLUME_RATIO_WEIGHT +
+    Math.abs(coin.priceChangePercent) * WHALE_MOVE_WEIGHT +
+    (coin.indicators.volume?.spike ? WHALE_VOLUME_SPIKE_BONUS : 0) +
+    coin.tradeSignal.confidence * WHALE_CONFIDENCE_WEIGHT;
   return clampScore(Math.round(raw));
 }
 
 function getSocialTrendScore(coin: CoinAnalysis): number {
+  // Social trend is a market-attention proxy based on price expansion plus crowd-followed liquidity.
   const raw =
-    Math.abs(coin.priceChangePercent) * 8 +
-    (coin.indicators.volume?.volumeRatio ?? 0) * 18 +
-    coin.tradeSignal.confidence * 0.25 +
-    (coin.signal === 'HOLD' ? 0 : 6);
+    Math.abs(coin.priceChangePercent) * SOCIAL_MOVE_WEIGHT +
+    (coin.indicators.volume?.volumeRatio ?? 0) * SOCIAL_VOLUME_RATIO_WEIGHT +
+    coin.tradeSignal.confidence * SOCIAL_CONFIDENCE_WEIGHT +
+    (coin.signal === 'HOLD' ? 0 : SOCIAL_DIRECTIONAL_SIGNAL_BONUS);
   return clampScore(Math.round(raw));
 }
 
@@ -247,6 +259,7 @@ export default function AiDecisionBoard() {
           whaleConfidence,
           whaleEstimatedUsd: getWhaleEstimatedUsd(coin),
           socialTrendScore,
+          // Attention score is the headline "watch now" reading that blends flow quality with crowd momentum.
           attentionScore: Math.round(whaleConfidence * ATTENTION_WHALE_WEIGHT + socialTrendScore * ATTENTION_SOCIAL_WEIGHT),
           marketRegime: coin.tradeSignal.market_regime,
           keyFactors: coin.tradeSignal.key_factors,
