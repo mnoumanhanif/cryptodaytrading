@@ -38,14 +38,14 @@ export default function PortfolioNotifications({
 }) {
   const [filter, setFilter] = useState<PortfolioNotificationFilter>('ALL');
   const [symbolFilter, setSymbolFilter] = useState('ALL');
-  const symbolSource = symbols && symbols.length > 0 ? symbols : notifications.map((item) => item.symbol);
 
-  const availableSymbols = useMemo(
-    () => Array.from(new Set(symbolSource)).sort(),
-    [symbolSource]
-  );
+  const availableSymbols = useMemo(() => {
+    const source = symbols && symbols.length > 0 ? symbols : notifications.map((item) => item.symbol);
+    return Array.from(new Set(source)).sort();
+  }, [notifications, symbols]);
 
   useEffect(() => {
+    // Reset to "ALL" when the selected coin is no longer available in the latest symbol list.
     if (symbolFilter === 'ALL') return;
     if (!availableSymbols.includes(symbolFilter)) {
       setSymbolFilter('ALL');
