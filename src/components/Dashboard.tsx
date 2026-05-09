@@ -845,15 +845,21 @@ function CandlePatternsPanel({
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
-        {patternCards.map((card) => {
-          return (
-            <PatternLearningCard
-              key={card.pattern.name}
-              card={card}
-              learningMode={learningMode}
-            />
-          );
-        })}
+        {patternCards.length === 0 ? (
+          <div className="md:col-span-2 xl:col-span-3 rounded-lg border border-gray-700 bg-gray-900/75 p-4">
+            <p className="text-sm text-gray-300">No pattern details found for the selected filters/coin.</p>
+          </div>
+        ) : (
+          patternCards.map((card) => {
+            return (
+              <PatternLearningCard
+                key={card.pattern.name}
+                card={card}
+                learningMode={learningMode}
+              />
+            );
+          })
+        )}
       </div>
     </div>
   );
@@ -1131,6 +1137,8 @@ export default function Dashboard() {
   const [patternTimeframeFilter, setPatternTimeframeFilter] = useState<'all' | PatternTimeframe>('all');
   const [patternConfirmedOnly, setPatternConfirmedOnly] = useState(true);
   const [patternLearningMode, setPatternLearningMode] = useState(false);
+  const [patternCoinFilter, setPatternCoinFilter] = useState<'all' | string>('all');
+  const [warningCoinFilter, setWarningCoinFilter] = useState<'all' | string>('all');
   const [notifySymbols, setNotifySymbols] = useState<Record<string, boolean>>({});
   const [signalAlerts, setSignalAlerts] = useState<QuickSignalAlert[]>([]);
   const [signalChanges, setSignalChanges] = useState<Array<{ symbol: string; change: SignalChangeDirection; confidence: number }>>([]);
@@ -1424,11 +1432,27 @@ export default function Dashboard() {
     [volumeSurgeCoins]
   );
 
-  const warningNews = useMemo<NewsRiskItem[]>(
+  const warningCoinOptions = useMemo(
+    () => [...new Set(coins.map((coin) => coin.symbol))].sort((a, b) => a.localeCompare(b)),
+    [coins]
+  );
+
+  useEffect(() => {
+    if (warningCoinFilter !== 'all' && !warningCoinOptions.includes(warningCoinFilter)) {
+      setWarningCoinFilter('all');
+    }
+  }, [warningCoinFilter, warningCoinOptions]);
+
+  useEffect(() => {
+    if (patternCoinFilter !== 'all' && !warningCoinOptions.includes(patternCoinFilter)) {
+      setPatternCoinFilter('all');
+    }
+  }, [patternCoinFilter, warningCoinOptions]);
+
+  const warningNewsAll = useMemo<NewsRiskItem[]>(
     () =>
       [...coins]
         .sort((a, b) => Math.abs(b.priceChangePercent) - Math.abs(a.priceChangePercent))
-        .slice(0, 12)
         .map((coin, index) => {
           const sentimentScore = Math.max(-100, Math.min(100, Math.round((coin.signal === 'SELL' ? -1 : coin.signal === 'BUY' ? 1 : 0) * coin.score)));
           const twitterTrendScore = Math.min(
@@ -1462,6 +1486,14 @@ export default function Dashboard() {
           };
         }),
     [coins]
+  );
+
+  const warningNews = useMemo<NewsRiskItem[]>(
+    () =>
+      warningCoinFilter === 'all'
+        ? warningNewsAll.slice(0, 12)
+        : warningNewsAll.filter((item) => item.symbol === warningCoinFilter),
+    [warningCoinFilter, warningNewsAll]
   );
 
   const liquidationHeatmap = useMemo<LiquidationHeatItem[]>(
@@ -1706,13 +1738,15 @@ export default function Dashboard() {
   }, [coins, patternCoinMatches]);
 
   const filteredPatternCards = useMemo(() => {
+    const selectedPatternBase = patternCoinFilter === 'all' ? null : patternCoinFilter.replace('USDT', '');
     return patternDecisionCards
       .filter((card) => (patternBiasFilter === 'all' ? true : card.pattern.bias === patternBiasFilter))
       .filter((card) => card.confidence >= patternMinConfidence)
       .filter((card) => (patternTimeframeFilter === 'all' ? true : card.timeframe === patternTimeframeFilter))
       .filter((card) => (!patternConfirmedOnly ? true : card.status === 'Confirmed'))
+      .filter((card) => (selectedPatternBase ? card.liveCoins.includes(selectedPatternBase) : true))
       .sort((a, b) => b.winProbability - a.winProbability);
-  }, [patternBiasFilter, patternConfirmedOnly, patternDecisionCards, patternMinConfidence, patternTimeframeFilter]);
+  }, [patternBiasFilter, patternCoinFilter, patternConfirmedOnly, patternDecisionCards, patternMinConfidence, patternTimeframeFilter]);
 
   const patternOverviewStats = useMemo(() => {
     const aggregate = patternDecisionCards.reduce(
@@ -2469,6 +2503,19 @@ export default function Dashboard() {
                   />
                   Learning Mode
                 </label>
+                <span className="text-gray-400 ml-2">Coin:</span>
+                <select
+                  value={patternCoinFilter}
+                  onChange={(event) => setPatternCoinFilter(event.target.value as 'all' | string)}
+                  className="rounded border border-gray-700 bg-gray-800 text-gray-200 px-2 py-1"
+                >
+                  <option value="all">All</option>
+                  {warningCoinOptions.map((symbol) => (
+                    <option key={`pattern-coin-${symbol}`} value={symbol}>
+                      {symbol.replace('USDT', '')}
+                    </option>
+                  ))}
+                </select>
               </div>
             </div>
 
@@ -3027,24 +3074,47 @@ export default function Dashboard() {
               Sentiment & News Intelligence includes internally generated risk headlines, bullish/bearish score, X (Twitter) trend tracking proxy, and News Impact Score (historical sensitivity proxy).
             </div>
             <div className="space-y-2">
-              {warningNews.map((item) => (
-                <div key={`${item.symbol}-${item.headline}`} className="rounded-lg border border-gray-800 bg-gray-900/70 p-3">
-                  <div className="flex items-center justify-between gap-2">
-                    <p className="text-sm font-semibold text-white">
-                      {item.symbol.replace('USDT', '')} · {item.source}
-                    </p>
-                    <span className={`text-[11px] px-2 py-0.5 rounded border ${item.riskLevel === 'High' ? 'text-red-300 border-red-600/40 bg-red-900/20' : 'text-yellow-300 border-yellow-600/40 bg-yellow-900/20'}`}>
-                      {item.riskLevel} Risk
-                    </span>
-                  </div>
-                  <p className="text-xs text-gray-300 mt-1">{item.headline}</p>
-                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 mt-2 text-[11px]">
-                    <p className="text-cyan-200">Sentiment: {item.sentimentScore > 0 ? '+' : ''}{item.sentimentScore}</p>
-                    <p className="text-purple-200">X Trend: {item.twitterTrendScore}/100</p>
-                    <p className="text-orange-200">News Impact Score: {item.newsImpactScore}/100</p>
-                  </div>
+              <div className="rounded-lg border border-gray-800 bg-gray-900/60 p-3">
+                <label className="text-xs text-gray-300 flex flex-wrap items-center gap-2">
+                  <span>Coin:</span>
+                  <select
+                    value={warningCoinFilter}
+                    onChange={(event) => setWarningCoinFilter(event.target.value as 'all' | string)}
+                    className="rounded border border-gray-700 bg-gray-800 text-gray-200 px-2 py-1"
+                  >
+                    <option value="all">All</option>
+                    {warningCoinOptions.map((symbol) => (
+                      <option key={`warning-coin-${symbol}`} value={symbol}>
+                        {symbol.replace('USDT', '')}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              </div>
+              {warningNews.length === 0 ? (
+                <div className="rounded-lg border border-gray-800 bg-gray-900/70 p-3">
+                  <p className="text-sm text-gray-400">No warning/news details found for the selected coin.</p>
                 </div>
-              ))}
+              ) : (
+                warningNews.map((item) => (
+                  <div key={`${item.symbol}-${item.headline}`} className="rounded-lg border border-gray-800 bg-gray-900/70 p-3">
+                    <div className="flex items-center justify-between gap-2">
+                      <p className="text-sm font-semibold text-white">
+                        {item.symbol.replace('USDT', '')} · {item.source}
+                      </p>
+                      <span className={`text-[11px] px-2 py-0.5 rounded border ${item.riskLevel === 'High' ? 'text-red-300 border-red-600/40 bg-red-900/20' : 'text-yellow-300 border-yellow-600/40 bg-yellow-900/20'}`}>
+                        {item.riskLevel} Risk
+                      </span>
+                    </div>
+                    <p className="text-xs text-gray-300 mt-1">{item.headline}</p>
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 mt-2 text-[11px]">
+                      <p className="text-cyan-200">Sentiment: {item.sentimentScore > 0 ? '+' : ''}{item.sentimentScore}</p>
+                      <p className="text-purple-200">X Trend: {item.twitterTrendScore}/100</p>
+                      <p className="text-orange-200">News Impact Score: {item.newsImpactScore}/100</p>
+                    </div>
+                  </div>
+                ))
+              )}
             </div>
           </div>
         )}
