@@ -128,6 +128,7 @@ Open `http://localhost:3000`.
 ```bash
 PAGES_EXPORT=false
 NEXT_PUBLIC_STATIC_EXPORT=false
+NEXT_PUBLIC_SITE_URL=https://your-domain.example
 BINANCE_API_KEY=
 BYBIT_API_KEY=
 BITGET_API_KEY=
