@@ -2688,7 +2688,7 @@ export default function Dashboard() {
               </div>
             </div>
 
-            <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 gap-4">
               <div className="rounded-xl border border-green-700/40 bg-green-900/10 p-3">
                 <h3 className="text-sm font-semibold text-green-300 mb-2">Top 10 Trending LONG Patterns</h3>
                 <div className="space-y-2">
