@@ -2927,7 +2927,7 @@ export default function Dashboard() {
               )}
             </section>
 
-            <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 gap-4">
               <section className="rounded-xl border border-green-700/40 bg-green-900/10 p-3 overflow-x-auto">
                 <h3 className={`${UI_SECTION_TITLE_CLASS} text-green-300 mb-2`}>🟢 LONG Opportunities</h3>
                 <table className={`w-full min-w-[900px] ${UI_DATA_TEXT_CLASS}`}>
