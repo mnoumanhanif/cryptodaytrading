@@ -5,10 +5,15 @@ const SITE_URL = (process.env.NEXT_PUBLIC_SITE_URL ?? 'https://example.com').rep
 export default function sitemap(): MetadataRoute.Sitemap {
   const routes = ['/', '/decisions'];
 
-  return routes.map((route) => ({
-    url: `${SITE_URL}${route}`,
-    lastModified: new Date(),
-    changeFrequency: route === '/' ? 'hourly' : 'daily',
-    priority: route === '/' ? 1 : 0.8,
-  }));
+  return routes.map((route) => {
+    const changeFrequency: MetadataRoute.Sitemap[number]['changeFrequency'] =
+      route === '/' ? 'hourly' : 'daily';
+
+    return {
+      url: `${SITE_URL}${route}`,
+      lastModified: new Date(),
+      changeFrequency,
+      priority: route === '/' ? 1 : 0.8,
+    };
+  });
 }
