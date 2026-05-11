@@ -2157,6 +2157,7 @@ export default function Dashboard() {
     }
     return { buyCount: buy, sellCount: sell, holdCount: hold };
   }, [coins]);
+  const isUnauthorizedError = !!error && (error.toLowerCase().includes('unauthorized') || error.includes('HTTP 401'));
 
   return (
     <div className="min-h-screen bg-gray-950 text-white">
@@ -2255,7 +2256,7 @@ export default function Dashboard() {
       {error && (
         <div className="max-w-7xl mx-auto px-4 mt-4">
           <div className="bg-red-500/10 border border-red-500/30 rounded-lg px-4 py-3 text-red-400 text-sm">
-            ⚠ {error}. Data may be stale. Auto-retrying...
+            {isUnauthorizedError ? `⚠ ${error}` : `⚠ ${error}. Data may be stale. Auto-retrying...`}
           </div>
         </div>
       )}
