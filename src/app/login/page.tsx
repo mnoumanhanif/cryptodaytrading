@@ -8,6 +8,19 @@ import { useAuth } from '@/contexts/AuthContext';
 
 type Mode = 'login' | 'register';
 
+const NETWORK_ERROR_MSG =
+  'Unable to reach the authentication server. Please check your internet connection and try again.';
+
+function isNetworkError(message: string): boolean {
+  const lower = message.toLowerCase();
+  return (
+    lower.includes('failed to fetch') ||
+    lower.includes('networkerror') ||
+    lower.includes('network error') ||
+    lower.includes('network request failed')
+  );
+}
+
 export default function LoginPage() {
   const router = useRouter();
   const { session, loading } = useAuth();
@@ -44,14 +57,14 @@ export default function LoginPage() {
       if (mode === 'login') {
         const { error: authError } = await supabase.auth.signInWithPassword({ email, password });
         if (authError) {
-          setError(authError.message);
+          setError(isNetworkError(authError.message) ? NETWORK_ERROR_MSG : authError.message);
         } else {
           router.replace('/dashboard');
         }
       } else {
         const { error: authError } = await supabase.auth.signUp({ email, password });
         if (authError) {
-          setError(authError.message);
+          setError(isNetworkError(authError.message) ? NETWORK_ERROR_MSG : authError.message);
         } else {
           setInfo('Account created! Check your email to confirm, then log in.');
           setMode('login');
@@ -59,8 +72,13 @@ export default function LoginPage() {
           setConfirmPassword('');
         }
       }
-    } catch {
-      setError('Authentication service is not configured. Please set up Supabase credentials.');
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      if (isNetworkError(message)) {
+        setError(NETWORK_ERROR_MSG);
+      } else {
+        setError('Authentication service is not configured. Please set up Supabase credentials.');
+      }
     } finally {
       setSubmitting(false);
     }
