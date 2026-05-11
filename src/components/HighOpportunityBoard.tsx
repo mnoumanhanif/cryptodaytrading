@@ -55,6 +55,9 @@ function moveBadgeClass(value: number): string {
   return 'text-yellow-200 bg-yellow-600/20 border-yellow-500/30';
 }
 
+const selectableCoinButtonClass =
+  'w-full text-left rounded-lg border border-gray-800 bg-gray-900/70 p-2.5 hover:border-blue-500/50 transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500/70';
+
 export default function HighOpportunityBoard() {
   const { coins, loading, error, lastUpdated, totalScanned, refetch } = useMarketData(['binance']);
   const [selectedCoin, setSelectedCoin] = useState<CoinAnalysis | null>(null);
@@ -283,7 +286,8 @@ export default function HighOpportunityBoard() {
                   type="button"
                   key={`move-${coin.symbol}`}
                   onClick={() => setSelectedCoin(coin)}
-                  className="w-full text-left rounded-lg border border-gray-800 bg-gray-900/70 p-2.5 hover:border-blue-500/50 transition-colors"
+                  aria-label={`View trade guidance for ${symbolName(coin.symbol)}`}
+                  className={selectableCoinButtonClass}
                 >
                   <p className="text-sm font-semibold text-white">{symbolName(coin.symbol)}</p>
                   <p className="text-xs text-gray-300 mt-1">Price: {formatPrice(coin.price)}</p>
@@ -305,7 +309,8 @@ export default function HighOpportunityBoard() {
                 type="button"
                 key={`interest-${coin.symbol}`}
                 onClick={() => setSelectedCoin(coin)}
-                className="w-full text-left rounded-lg border border-gray-800 bg-gray-900/70 p-2.5 hover:border-blue-500/50 transition-colors"
+                aria-label={`View trade guidance for ${symbolName(coin.symbol)}`}
+                className={selectableCoinButtonClass}
               >
                 <div className="flex items-center justify-between gap-2">
                   <p className="text-sm font-semibold text-white">{symbolName(coin.symbol)}</p>
@@ -331,7 +336,8 @@ export default function HighOpportunityBoard() {
                   type="button"
                   key={`whale-${item.coin.symbol}`}
                   onClick={() => setSelectedCoin(item.coin)}
-                  className="w-full text-left rounded-lg border border-gray-800 bg-gray-900/70 p-2.5 hover:border-blue-500/50 transition-colors"
+                  aria-label={`View trade guidance for ${symbolName(item.coin.symbol)}`}
+                  className={selectableCoinButtonClass}
                 >
                   <div className="flex items-center justify-between gap-2">
                     <p className="text-sm font-semibold text-white">{symbolName(item.coin.symbol)}</p>
@@ -354,7 +360,8 @@ export default function HighOpportunityBoard() {
                 type="button"
                 key={`news-${item.symbol}`}
                 onClick={() => setSelectedCoin(item.coin)}
-                className="w-full text-left rounded-lg border border-gray-800 bg-gray-900/70 p-2.5 hover:border-blue-500/50 transition-colors"
+                aria-label={`View trade guidance for ${symbolName(item.symbol)}`}
+                className={selectableCoinButtonClass}
               >
                 <div className="flex items-center justify-between gap-2">
                   <p className="text-xs font-semibold text-white">{symbolName(item.symbol)}</p>
@@ -376,7 +383,8 @@ export default function HighOpportunityBoard() {
                 type="button"
                 key={`profit-${item.coin.symbol}`}
                 onClick={() => setSelectedCoin(item.coin)}
-                className="w-full text-left rounded-lg border border-gray-800 bg-gray-900/70 p-2.5 hover:border-blue-500/50 transition-colors"
+                aria-label={`View trade guidance for ${symbolName(item.coin.symbol)}`}
+                className={selectableCoinButtonClass}
               >
                 <div className="flex items-center justify-between gap-2">
                   <p className="text-sm font-semibold text-white">#{idx + 1} {symbolName(item.coin.symbol)}</p>
