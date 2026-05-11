@@ -17,6 +17,17 @@ type ProfitItem = {
   opportunityScore: number;
 };
 
+const VOLUME_RATIO_CONFIDENCE_MULTIPLIER = 30;
+const OPPORTUNITY_MOVE_MULTIPLIER = 7;
+const OPPORTUNITY_VOLUME_MULTIPLIER = 30;
+const OPPORTUNITY_WEIGHTS = {
+  confidence: 0.35,
+  move: 0.2,
+  volume: 0.2,
+  trend: 0.15,
+  riskReward: 0.1,
+};
+
 function symbolName(symbol: string): string {
   return symbol.replace('USDT', '');
 }
@@ -64,7 +75,7 @@ export default function HighOpportunityBoard() {
         .filter((coin) => (coin.indicators.volume?.volumeRatio ?? 0) >= 1.8 && coin.signal === 'BUY')
         .map((coin) => {
           const estimatedUsd = (coin.indicators.volume?.currentVolume ?? 0) * coin.price;
-          const confidence = Math.min(99, Math.round((coin.indicators.volume?.volumeRatio ?? 0) * 30));
+          const confidence = Math.min(99, Math.round((coin.indicators.volume?.volumeRatio ?? 0) * VOLUME_RATIO_CONFIDENCE_MULTIPLIER));
           return { coin, estimatedUsd, confidence };
         })
         .sort((a, b) => b.estimatedUsd - a.estimatedUsd)
@@ -102,12 +113,16 @@ export default function HighOpportunityBoard() {
     () =>
       [...coins]
         .map((coin) => {
-          const moveScore = Math.min(100, Math.abs(coin.priceChangePercent) * 7);
-          const volumeScore = Math.min(100, (coin.indicators.volume?.volumeRatio ?? 0) * 30);
+          const moveScore = Math.min(100, Math.abs(coin.priceChangePercent) * OPPORTUNITY_MOVE_MULTIPLIER);
+          const volumeScore = Math.min(100, (coin.indicators.volume?.volumeRatio ?? 0) * OPPORTUNITY_VOLUME_MULTIPLIER);
           const trendScore = coin.indicators.ma.trend === 'bullish' ? 100 : coin.indicators.ma.trend === 'neutral' ? 55 : 20;
           const rrScore = Math.min(100, coin.risk.riskRewardRatio * 20);
           const opportunityScore = Math.round(
-            coin.tradeSignal.confidence * 0.35 + moveScore * 0.2 + volumeScore * 0.2 + trendScore * 0.15 + rrScore * 0.1
+            coin.tradeSignal.confidence * OPPORTUNITY_WEIGHTS.confidence +
+                moveScore * OPPORTUNITY_WEIGHTS.move +
+                volumeScore * OPPORTUNITY_WEIGHTS.volume +
+                trendScore * OPPORTUNITY_WEIGHTS.trend +
+                rrScore * OPPORTUNITY_WEIGHTS.riskReward
           );
 
           return {
