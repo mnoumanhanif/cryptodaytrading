@@ -135,5 +135,5 @@ export function useMarketData(selectedExchanges: SupportedExchange[] = ['binance
     return () => clearInterval(interval);
   }, [fetchData, hasUnauthorizedError]);
 
-  return { coins, loading, error, lastUpdated, totalScanned, refetch: fetchData };
+  return { coins, loading, error, hasUnauthorizedError, lastUpdated, totalScanned, refetch: fetchData };
 }
