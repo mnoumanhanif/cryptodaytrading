@@ -135,7 +135,7 @@ const PRICING = [
     period: '/ month',
     highlight: false,
     cta: 'Get Started Free',
-    href: '/dashboard',
+    href: '/login',
     features: [
       '60 API requests / min',
       '50 scanner scans / day',
@@ -151,7 +151,7 @@ const PRICING = [
     period: '/ month',
     highlight: true,
     cta: 'Start Pro Trial',
-    href: '/dashboard',
+    href: '/login',
     badge: 'Most Popular',
     features: [
       '600 API requests / min',
@@ -207,13 +207,13 @@ function Navbar() {
         </div>
         <div className="flex items-center gap-3">
           <Link
-            href="/dashboard"
+            href="/login"
             className="rounded-lg border border-gray-700 px-4 py-1.5 text-sm text-gray-300 hover:border-cyan-500 hover:text-white transition-colors"
           >
-            Dashboard
+            Log In
           </Link>
           <Link
-            href="/dashboard"
+            href="/login"
             className="rounded-lg bg-cyan-500 px-4 py-1.5 text-sm font-semibold text-gray-950 hover:bg-cyan-400 transition-colors"
           >
             Get Started
@@ -256,10 +256,10 @@ function Hero() {
 
         <div className="mt-10 flex flex-wrap items-center justify-center gap-4">
           <Link
-            href="/dashboard"
+            href="/login"
             className="rounded-xl bg-cyan-500 px-8 py-3 text-base font-bold text-gray-950 shadow-lg shadow-cyan-500/30 hover:bg-cyan-400 transition-colors"
           >
-            Launch Dashboard →
+            Get Started Free →
           </Link>
           <a
             href="#features"
@@ -503,10 +503,10 @@ function CtaBanner() {
           </p>
           <div className="relative mt-8 flex flex-wrap items-center justify-center gap-4">
             <Link
-              href="/dashboard"
+              href="/login"
               className="rounded-xl bg-cyan-500 px-10 py-3 text-base font-bold text-gray-950 shadow-lg shadow-cyan-500/30 hover:bg-cyan-400 transition-colors"
             >
-              Launch Dashboard — It&apos;s Free
+              Get Started — It&apos;s Free
             </Link>
           </div>
         </div>

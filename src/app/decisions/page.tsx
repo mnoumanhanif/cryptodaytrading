@@ -1,5 +1,10 @@
+import AuthGuard from '@/components/AuthGuard';
 import AiDecisionBoard from '@/components/AiDecisionBoard';
 
 export default function DecisionsPage() {
-  return <AiDecisionBoard />;
+  return (
+    <AuthGuard>
+      <AiDecisionBoard />
+    </AuthGuard>
+  );
 }
