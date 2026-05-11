@@ -125,7 +125,7 @@ export function useMarketData(selectedExchanges: SupportedExchange[] = ['binance
     }
   }, [selectedExchanges]);
 
-  const hasUnauthorizedError = !!error && (error.toLowerCase().includes('unauthorized') || error.includes('HTTP 401'));
+  const hasUnauthorizedError = !!error && (error.toLowerCase().includes('unauthorized') || error.toLowerCase().includes('http 401'));
 
   useEffect(() => {
     if (hasUnauthorizedError) return;
