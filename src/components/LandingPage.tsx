@@ -23,7 +23,7 @@ const NAV_GROUPS = [
       },
       {
         name: 'Scanner',
-        desc: 'Auto-scan every USDT pair across Binance, Bybit and Bitget for 10–25 % gain setups.',
+        desc: 'Auto-scan every USDT pair across Binance, Bybit and Bitget for 10–25% gain setups.',
       },
     ],
   },
@@ -77,7 +77,7 @@ const NAV_GROUPS = [
     tabs: [
       {
         name: 'Patterns',
-        desc: 'Automated candlestick pattern recognition across 5 m, 15 m and 1 h timeframes.',
+        desc: 'Automated candlestick pattern recognition across 5m, 15m and 1h timeframes.',
       },
       {
         name: 'Risk Warnings',
@@ -155,7 +155,7 @@ const PRICING = [
     badge: 'Most Popular',
     features: [
       '600 API requests / min',
-      '1 000 scanner scans / day',
+      '1,000 scanner scans / day',
       'Up to 500 symbols per scan',
       'AI Decision Board',
       'High Opportunity Board',
@@ -362,7 +362,7 @@ function HowItWorks() {
     {
       num: '02',
       title: 'Scan the market',
-      desc: 'The scanner analyses all USDT pairs and surfaces coins with 10–25 % gain potential in one click.',
+      desc: 'The scanner analyses all USDT pairs and surfaces coins with 10–25% gain potential in one click.',
     },
     {
       num: '03',
