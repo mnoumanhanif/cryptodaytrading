@@ -58,15 +58,15 @@ export function useMarketData(selectedExchanges: SupportedExchange[] = ['binance
             async (res) => {
               if (!res.ok) {
                 let message = `HTTP ${res.status}`;
+                if (res.status === 401) {
+                  message = 'Unauthorized. Please sign in again.';
+                }
+
                 try {
                   const payload = (await res.json()) as { error?: string };
                   if (payload.error) message = payload.error;
                 } catch {
                   // Ignore JSON parse errors and keep generic message
-                }
-
-                if (res.status === 401) {
-                  message = 'Unauthorized. Please sign in again.';
                 }
 
                 throw new Error(message);
@@ -128,12 +128,9 @@ export function useMarketData(selectedExchanges: SupportedExchange[] = ['binance
   const hasUnauthorizedError = !!error && (error.toLowerCase().includes('unauthorized') || error.includes('HTTP 401'));
 
   useEffect(() => {
-    if (!hasUnauthorizedError) {
-      void fetchData();
-    }
-
     if (hasUnauthorizedError) return;
 
+    void fetchData();
     const interval = setInterval(fetchData, REFRESH_INTERVAL_MS);
     return () => clearInterval(interval);
   }, [fetchData, hasUnauthorizedError]);
