@@ -506,7 +506,7 @@ function CtaBanner() {
               href="/login"
               className="rounded-xl bg-cyan-500 px-10 py-3 text-base font-bold text-gray-950 shadow-lg shadow-cyan-500/30 hover:bg-cyan-400 transition-colors"
             >
-              Get Started Free — It&apos;s Free
+              Get Started — It&apos;s Free
             </Link>
           </div>
         </div>
