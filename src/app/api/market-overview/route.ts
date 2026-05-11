@@ -8,6 +8,9 @@ import {
   SupportedExchange,
 } from '@/lib/exchangeMarket';
 import { EnhancedCoinAnalysis } from '@/lib/types';
+import { z } from 'zod';
+import { requireRequestContext } from '@/lib/saas/context';
+import { badRequestFromZod } from '@/lib/saas/validation';
 
 export const dynamic = 'force-dynamic';
 export const maxDuration = 60;
@@ -74,6 +77,10 @@ const EXCHANGE_NAMES: Record<SupportedExchange, string> = {
   bitget: 'Bitget',
 };
 
+const marketOverviewQuerySchema = z.object({
+  symbol: z.string().regex(/^[A-Za-z0-9]+$/).optional(),
+});
+
 function toOverviewRow(coin: EnhancedCoinAnalysis, exchange: SupportedExchange): OverviewTradeRow {
   const direction: 'LONG' | 'SHORT' | 'HOLD' =
     coin.risk.targetPrice < coin.risk.entryPrice
@@ -118,9 +125,19 @@ function parseRequestedExchanges(searchParams: URLSearchParams): SupportedExchan
 
 export async function GET(request: Request) {
   try {
+    const contextOrResponse = requireRequestContext(request);
+    if (contextOrResponse instanceof NextResponse) return contextOrResponse;
+
     const { searchParams } = new URL(request.url);
+    const parsed = marketOverviewQuerySchema.safeParse({
+      symbol: searchParams.get('symbol') ?? undefined,
+    });
+    if (!parsed.success) {
+      return badRequestFromZod(parsed.error);
+    }
+
     const exchanges = parseRequestedExchanges(searchParams);
-    const symbolParam = searchParams.get('symbol')?.toUpperCase().trim();
+    const symbolParam = parsed.data.symbol?.toUpperCase().trim();
     if (symbolParam) {
       if (!/^[A-Z0-9]+$/.test(symbolParam)) {
         return NextResponse.json({ error: 'Invalid symbol format' }, { status: 400 });

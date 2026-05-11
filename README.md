@@ -129,6 +129,17 @@ Open `http://localhost:3000`.
 PAGES_EXPORT=false
 NEXT_PUBLIC_STATIC_EXPORT=false
 NEXT_PUBLIC_SITE_URL=https://your-domain.example
+SAAS_SERVICE_API_KEY=replace-with-long-random-secret
+CLERK_JWKS_URL=https://<your-clerk-domain>/.well-known/jwks.json
+CLERK_ISSUER=https://<your-clerk-domain>
+CLERK_AUDIENCE=
+SUPABASE_URL=https://<project-ref>.supabase.co
+SUPABASE_SERVICE_ROLE_KEY=
+UPSTASH_REDIS_REST_URL=
+UPSTASH_REDIS_REST_TOKEN=
+STRIPE_SECRET_KEY=
+STRIPE_WEBHOOK_SECRET=
+SAAS_DEFAULT_WORKSPACE_ID=default
 BINANCE_API_KEY=
 BYBIT_API_KEY=
 BITGET_API_KEY=
@@ -147,6 +158,17 @@ npm run build
   ```bash
   PAGES_EXPORT=true NEXT_PUBLIC_STATIC_EXPORT=true npm run build
   ```
+- All API routes are protected by auth middleware (except Stripe webhook), with RBAC + per-tier rate/usage limits.
+- Run Supabase SQL bootstrap first: `supabase/migrations/001_saas_foundation.sql`
+
+### SaaS Security/Operations Checklist (Production)
+- Deploy to Vercel with all secrets in environment variables (never commit secrets).
+- Rotate `SAAS_SERVICE_API_KEY`, Stripe, Supabase, and exchange keys on a schedule and after any exposure event.
+- Configure Clerk JWT claims to include role (`admin|user`), tenant/workspace ID, and tier (`free|pro`).
+- Configure Upstash Redis for shared rate limits across instances.
+- Configure Stripe webhook endpoint: `POST /api/stripe/webhook`.
+- Configure Sentry alerts and Vercel Analytics dashboard thresholds for elevated 4xx/5xx and latency spikes.
+- Configure daily automated Supabase backups + quarterly restore drill.
 
 ---
 
@@ -213,6 +235,14 @@ Returns in-memory signal journal entries and summary stats.
 ### `GET/POST /api/portfolio-risk`
 - GET: current account risk state + summary
 - POST: update state and/or trading enablement
+
+### `POST /api/billing/portal`
+- Creates Stripe Billing Portal session for authenticated workspace.
+- Body: `{ "returnUrl": "https://your-app.example/account" }`
+
+### `POST /api/stripe/webhook`
+- Stripe subscription lifecycle webhook.
+- Syncs workspace subscription status/tier in Supabase.
 
 ---
 

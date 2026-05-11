@@ -6,38 +6,42 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { fetchKlines } from '@/lib/binance';
 import { KlinesResponse } from '@/lib/types';
+import { z } from 'zod';
+import { requireRequestContext } from '@/lib/saas/context';
+import { badRequestFromZod } from '@/lib/saas/validation';
 
 // Vercel serverless configuration
 export const dynamic = 'force-dynamic';
 export const maxDuration = 15;
 
-const VALID_INTERVALS = ['1m','3m','5m','15m','30m','1h','2h','4h','6h','8h','12h','1d','1w','1M'];
+const klinesQuerySchema = z.object({
+  symbol: z.string().regex(/^[A-Za-z0-9]+$/),
+  interval: z.enum(['1m','3m','5m','15m','30m','1h','2h','4h','6h','8h','12h','1d','1w','1M']).optional(),
+  limit: z.coerce.number().int().min(1).max(500).optional(),
+});
 
 export async function GET(request: NextRequest) {
   try {
+    const contextOrResponse = requireRequestContext(request);
+    if (contextOrResponse instanceof NextResponse) return contextOrResponse;
+
     const { searchParams } = new URL(request.url);
-    const symbol = searchParams.get('symbol');
-    const interval = searchParams.get('interval') || '1h';
-    const limit = parseInt(searchParams.get('limit') || '100', 10);
-
-    if (!symbol) {
-      return NextResponse.json({ error: 'Symbol parameter required' }, { status: 400 });
+    const parsed = klinesQuerySchema.safeParse({
+      symbol: searchParams.get('symbol'),
+      interval: searchParams.get('interval') ?? undefined,
+      limit: searchParams.get('limit') ?? undefined,
+    });
+    if (!parsed.success) {
+      return badRequestFromZod(parsed.error);
     }
+    const symbol = parsed.data.symbol.toUpperCase();
+    const interval = parsed.data.interval ?? '1h';
+    const limit = parsed.data.limit ?? 100;
 
-    // Validate symbol format (alphanumeric only)
-    if (!/^[A-Z0-9]+$/.test(symbol.toUpperCase())) {
-      return NextResponse.json({ error: 'Invalid symbol format' }, { status: 400 });
-    }
-
-    // Validate interval format
-    if (!VALID_INTERVALS.includes(interval)) {
-      return NextResponse.json({ error: `Invalid interval. Must be one of: ${VALID_INTERVALS.join(', ')}` }, { status: 400 });
-    }
-
-    const candles = await fetchKlines(symbol.toUpperCase(), interval, Math.min(limit, 500));
+    const candles = await fetchKlines(symbol, interval, limit);
 
     const response: KlinesResponse = {
-      symbol: symbol.toUpperCase(),
+      symbol,
       interval,
       candles,
     };

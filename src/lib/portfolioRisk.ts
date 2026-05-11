@@ -15,6 +15,7 @@ import {
   TradeOutcome,
 } from './types';
 import { getJournalEntries } from './tradeJournal';
+import { upsertPortfolioStateByWorkspace } from './saas/db';
 
 // ============================================================
 // Default configuration
@@ -71,11 +72,13 @@ export function getAccountState(): AccountState {
 export function updateAccountState(updates: Partial<AccountState>): void {
   maybeResetDaily();
   accountState = { ...accountState, ...updates };
+  void upsertPortfolioStateByWorkspace(process.env.SAAS_DEFAULT_WORKSPACE_ID ?? 'default', accountState);
 }
 
 /** Emergency kill switch – immediately disable all trading signals */
 export function setTradingEnabled(enabled: boolean): void {
   accountState.tradingEnabled = enabled;
+  void upsertPortfolioStateByWorkspace(process.env.SAAS_DEFAULT_WORKSPACE_ID ?? 'default', accountState);
 }
 
 /**

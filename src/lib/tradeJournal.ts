@@ -13,6 +13,7 @@ import {
   TradeJournalEntry,
   TradeOutcome,
 } from './types';
+import { insertTradeJournalEntry } from './saas/db';
 
 // ============================================================
 // In-memory journal store (persists within server process)
@@ -96,6 +97,28 @@ export function logSignal(params: {
   }
 
   journal.push(entry);
+  void insertTradeJournalEntry({
+    workspaceId: process.env.SAAS_DEFAULT_WORKSPACE_ID ?? 'default',
+    entry: {
+      id: entry.id,
+      symbol: entry.symbol,
+      signal: entry.signal,
+      entry_price: entry.entryPrice,
+      stop_loss: entry.stopLoss,
+      take_profit_1: entry.takeProfit1,
+      take_profit_2: entry.takeProfit2,
+      take_profit_3: entry.takeProfit3,
+      score: entry.score,
+      confidence: entry.confidence,
+      regime: entry.regime,
+      net_rr: entry.netRR,
+      cost_assumptions: entry.costAssumptions,
+      rationale: entry.rationale,
+      indicators: entry.indicators,
+      created_at_ms: entry.createdAt,
+      outcome: entry.outcome,
+    },
+  });
   return entry;
 }
 
