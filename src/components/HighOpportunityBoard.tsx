@@ -57,6 +57,7 @@ function moveBadgeClass(value: number): string {
 
 const selectableCoinButtonClass =
   'w-full text-left rounded-lg border border-gray-800 bg-gray-900/70 p-2.5 hover:border-blue-500/50 transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500/70';
+const selectionHint = 'Click for entry, stop loss, take profit, and indicators';
 
 export default function HighOpportunityBoard() {
   const { coins, loading, error, lastUpdated, totalScanned, refetch } = useMarketData(['binance']);
@@ -267,7 +268,7 @@ export default function HighOpportunityBoard() {
               </div>
               <div className="rounded border border-gray-700 bg-gray-900/60 p-2">
                 <p className="text-gray-400">Volume Ratio</p>
-                <p className="font-mono text-white">{(selectedCoin.indicators.volume?.volumeRatio ?? 0).toFixed(2)}x</p>
+                <p className="font-mono text-white">{selectedCoin.indicators.volume.volumeRatio.toFixed(2)}x</p>
               </div>
             </div>
             <TradeSignalBoard coin={selectedCoin} />
@@ -294,7 +295,7 @@ export default function HighOpportunityBoard() {
                   <span className={`inline-flex mt-1 text-[11px] px-2 py-0.5 rounded border ${moveBadgeClass(Math.abs(coin.priceChangePercent))}`}>
                     {coin.priceChangePercent >= 0 ? '+' : ''}{coin.priceChangePercent.toFixed(2)}%
                   </span>
-                  <p className="text-[10px] text-blue-300 mt-1">Click for entry/SL/TP and indicators</p>
+                  <p className="text-[10px] text-blue-300 mt-1">{selectionHint}</p>
                 </button>
               ))
             )}
@@ -319,7 +320,7 @@ export default function HighOpportunityBoard() {
                 <p className="text-[11px] text-gray-300 mt-1">
                   Vol Ratio {(coin.indicators.volume?.volumeRatio ?? 0).toFixed(2)}x · Signal {coin.signal}
                 </p>
-                <p className="text-[10px] text-blue-300 mt-1">Click for trading levels and guide</p>
+                <p className="text-[10px] text-blue-300 mt-1">{selectionHint}</p>
               </button>
             ))}
           </div>
@@ -345,7 +346,7 @@ export default function HighOpportunityBoard() {
                   </div>
                   <p className="text-[11px] text-gray-300 mt-1">Estimated Size: {formatVolume(item.estimatedUsd)}</p>
                   <p className="text-[11px] text-gray-400">Volume Ratio: {(item.coin.indicators.volume?.volumeRatio ?? 0).toFixed(2)}x</p>
-                  <p className="text-[10px] text-blue-300 mt-1">Click for setup details</p>
+                  <p className="text-[10px] text-blue-300 mt-1">{selectionHint}</p>
                 </button>
               ))
             )}
@@ -369,7 +370,7 @@ export default function HighOpportunityBoard() {
                 </div>
                 <p className="text-[11px] text-gray-300 mt-1">{item.headline}</p>
                 <p className="text-[11px] text-cyan-200 mt-1">Sentiment: {item.sentiment > 0 ? '+' : ''}{item.sentiment}</p>
-                <p className="text-[10px] text-blue-300 mt-1">Click for full trading guidance</p>
+                <p className="text-[10px] text-blue-300 mt-1">{selectionHint}</p>
               </button>
             ))}
           </div>
@@ -396,7 +397,7 @@ export default function HighOpportunityBoard() {
                   <p>R:R: 1:{item.coin.risk.riskRewardRatio.toFixed(2)}</p>
                   <p>Volume: {formatVolume(item.coin.volume24h)}</p>
                 </div>
-                <p className="text-[10px] text-blue-300 mt-1">Click for support/resistance and TP levels</p>
+                <p className="text-[10px] text-blue-300 mt-1">{selectionHint}</p>
               </button>
             ))}
           </div>
