@@ -24,6 +24,7 @@ import {
   EnhancedCoinAnalysis,
   EnhancedMarketAnalysisResponse,
 } from '@/lib/types';
+import { requireRequestContext } from '@/lib/saas/context';
 
 export const dynamic = 'force-dynamic';
 export const maxDuration = 60;
@@ -168,8 +169,11 @@ function buildBuySignal(
   };
 }
 
-export async function GET() {
+export async function GET(request: Request) {
   try {
+    const contextOrResponse = requireRequestContext(request);
+    if (contextOrResponse instanceof NextResponse) return contextOrResponse;
+
     const now = Date.now();
     // Return cache if fresh
     if (cachedResult && now - lastFetchTime < CACHE_TTL) {

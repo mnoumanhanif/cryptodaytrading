@@ -5,6 +5,9 @@
 
 import { NextResponse } from 'next/server';
 import { getTopUSDTPairsByExchange, isSupportedExchange, SupportedExchange } from '@/lib/exchangeMarket';
+import { z } from 'zod';
+import { requireRequestContext } from '@/lib/saas/context';
+import { badRequestFromZod } from '@/lib/saas/validation';
 
 // Vercel serverless configuration
 export const dynamic = 'force-dynamic';
@@ -43,6 +46,13 @@ const EXCHANGE_NAMES: Record<SupportedExchange, string> = {
   bitget: 'Bitget',
 };
 
+const topCoinsQuerySchema = z.object({
+  page: z.coerce.number().int().min(1).optional(),
+  limit: z.coerce.number().int().min(1).max(100).optional(),
+  sort: z.enum(['volume', 'change', 'change_asc', 'price']).optional(),
+  total: z.coerce.number().int().min(1).max(500).optional(),
+});
+
 function parseRequestedExchanges(searchParams: URLSearchParams): SupportedExchange[] {
   const exchangesParam = searchParams.get('exchanges');
   if (exchangesParam) {
@@ -60,14 +70,24 @@ function parseRequestedExchanges(searchParams: URLSearchParams): SupportedExchan
 
 export async function GET(request: Request) {
   try {
+    const contextOrResponse = requireRequestContext(request);
+    if (contextOrResponse instanceof NextResponse) return contextOrResponse;
+
     const { searchParams } = new URL(request.url);
-    const pageParam = parseInt(searchParams.get('page') ?? '1', 10);
-    const page = isNaN(pageParam) || pageParam < 1 ? 1 : pageParam;
-    const limitParam = parseInt(searchParams.get('limit') ?? '25', 10);
-    const limit = isNaN(limitParam) ? 25 : Math.min(Math.max(limitParam, 1), 100);
-    const sort = searchParams.get('sort') ?? 'volume';
-    const totalParam = parseInt(searchParams.get('total') ?? '500', 10);
-    const total = isNaN(totalParam) ? 500 : Math.min(Math.max(totalParam, 1), 500);
+    const parsed = topCoinsQuerySchema.safeParse({
+      page: searchParams.get('page') ?? undefined,
+      limit: searchParams.get('limit') ?? undefined,
+      sort: searchParams.get('sort') ?? undefined,
+      total: searchParams.get('total') ?? undefined,
+    });
+    if (!parsed.success) {
+      return badRequestFromZod(parsed.error);
+    }
+
+    const page = parsed.data.page ?? 1;
+    const limit = parsed.data.limit ?? 25;
+    const sort = parsed.data.sort ?? 'volume';
+    const total = parsed.data.total ?? 500;
     const exchanges = parseRequestedExchanges(searchParams);
     const cacheKey = exchanges.join(',');
 

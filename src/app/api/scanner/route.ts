@@ -8,6 +8,9 @@ import { fetchKlinesByExchange, getTopUSDTPairsByExchange, isSupportedExchange, 
 import { analyzeEnhanced } from '@/lib/analyzer';
 import { EnhancedCoinAnalysis, EnhancedScannerResponse } from '@/lib/types';
 import { getPortfolioRiskSummary } from '@/lib/portfolioRisk';
+import { z } from 'zod';
+import { requireRequestContext } from '@/lib/saas/context';
+import { badRequestFromZod } from '@/lib/saas/validation';
 
 // Vercel serverless configuration
 export const dynamic = 'force-dynamic';
@@ -28,6 +31,12 @@ const EXCHANGE_NAMES: Record<SupportedExchange, string> = {
   bitget: 'Bitget',
 };
 
+const scannerQuerySchema = z.object({
+  signal: z.enum(['BUY', 'SELL', 'HOLD']).optional(),
+  sort: z.enum(['score', 'change', 'volume']).optional(),
+  limit: z.coerce.number().int().min(1).max(1000).optional(),
+});
+
 function parseRequestedExchanges(searchParams: URLSearchParams): SupportedExchange[] {
   const exchangesParam = searchParams.get('exchanges');
   if (exchangesParam) {
@@ -47,13 +56,24 @@ function parseRequestedExchanges(searchParams: URLSearchParams): SupportedExchan
 
 export async function GET(request: Request) {
   try {
+    const contextOrResponse = requireRequestContext(request);
+    if (contextOrResponse instanceof NextResponse) return contextOrResponse;
+
     const { searchParams } = new URL(request.url);
+    const parsed = scannerQuerySchema.safeParse({
+      signal: searchParams.get('signal')?.toUpperCase() ?? undefined,
+      sort: searchParams.get('sort') ?? undefined,
+      limit: searchParams.get('limit') ?? undefined,
+    });
+    if (!parsed.success) {
+      return badRequestFromZod(parsed.error);
+    }
+
     const exchanges = parseRequestedExchanges(searchParams);
     const cacheKey = exchanges.join(',');
-    const signalFilter = searchParams.get('signal')?.toUpperCase();
-    const sortBy = searchParams.get('sort') ?? 'score';
-    const limitParam = parseInt(searchParams.get('limit') ?? '1000', 10);
-    const limit = isNaN(limitParam) ? 1000 : Math.min(Math.max(limitParam, 1), 1000);
+    const signalFilter = parsed.data.signal;
+    const sortBy = parsed.data.sort ?? 'score';
+    const limit = parsed.data.limit ?? 1000;
 
     const now = Date.now();
     const cached = cacheByExchange.get(cacheKey);

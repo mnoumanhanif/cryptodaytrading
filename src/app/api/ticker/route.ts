@@ -6,29 +6,35 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { fetchPrice } from '@/lib/binance';
 import { TickerResponse } from '@/lib/types';
+import { z } from 'zod';
+import { requireRequestContext } from '@/lib/saas/context';
+import { badRequestFromZod } from '@/lib/saas/validation';
 
 // Vercel serverless configuration
 export const dynamic = 'force-dynamic';
 export const maxDuration = 15;
+const tickerQuerySchema = z.object({
+  symbol: z.string().regex(/^[A-Za-z0-9]+$/),
+});
 
 export async function GET(request: NextRequest) {
   try {
+    const contextOrResponse = requireRequestContext(request);
+    if (contextOrResponse instanceof NextResponse) return contextOrResponse;
+
     const { searchParams } = new URL(request.url);
-    const symbol = searchParams.get('symbol');
-
-    if (!symbol) {
-      return NextResponse.json({ error: 'Symbol parameter required' }, { status: 400 });
+    const parsed = tickerQuerySchema.safeParse({
+      symbol: searchParams.get('symbol'),
+    });
+    if (!parsed.success) {
+      return badRequestFromZod(parsed.error);
     }
+    const symbol = parsed.data.symbol.toUpperCase();
 
-    // Validate symbol format (alphanumeric only)
-    if (!/^[A-Z0-9]+$/.test(symbol.toUpperCase())) {
-      return NextResponse.json({ error: 'Invalid symbol format' }, { status: 400 });
-    }
-
-    const price = await fetchPrice(symbol.toUpperCase());
+    const price = await fetchPrice(symbol);
 
     const response: TickerResponse = {
-      symbol: symbol.toUpperCase(),
+      symbol,
       price,
       timestamp: Date.now(),
     };

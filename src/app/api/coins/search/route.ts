@@ -13,10 +13,19 @@ import {
   getTopUSDTPairsByExchange,
   isSupportedExchange,
 } from '@/lib/exchangeMarket';
+import { z } from 'zod';
+import { requireRequestContext } from '@/lib/saas/context';
+import { badRequestFromZod } from '@/lib/saas/validation';
 
 // Vercel serverless configuration
 export const dynamic = 'force-dynamic';
 export const maxDuration = 30;
+
+const coinsSearchQuerySchema = z.object({
+  q: z.string().min(1).max(20).regex(/^[A-Za-z0-9]+$/).optional(),
+  symbol: z.string().min(1).max(20).regex(/^[A-Za-z0-9]+$/).optional(),
+  limit: z.coerce.number().int().min(1).max(50).optional(),
+});
 
 function parseRequestedExchanges(searchParams: URLSearchParams): SupportedExchange[] {
   const exchangesParam = searchParams.get('exchanges');
@@ -34,12 +43,23 @@ function parseRequestedExchanges(searchParams: URLSearchParams): SupportedExchan
 
 export async function GET(request: Request) {
   try {
+    const contextOrResponse = requireRequestContext(request);
+    if (contextOrResponse instanceof NextResponse) return contextOrResponse;
+
     const { searchParams } = new URL(request.url);
+    const parsed = coinsSearchQuerySchema.safeParse({
+      q: searchParams.get('q') ?? undefined,
+      symbol: searchParams.get('symbol') ?? undefined,
+      limit: searchParams.get('limit') ?? undefined,
+    });
+    if (!parsed.success) {
+      return badRequestFromZod(parsed.error);
+    }
+
     const exchanges = parseRequestedExchanges(searchParams);
-    const query = searchParams.get('q')?.toUpperCase() ?? '';
-    const exactSymbol = searchParams.get('symbol')?.toUpperCase();
-    const limitParam = parseInt(searchParams.get('limit') ?? '50', 10);
-    const limit = isNaN(limitParam) ? 50 : Math.min(Math.max(limitParam, 1), 50);
+    const query = parsed.data.q?.toUpperCase() ?? '';
+    const exactSymbol = parsed.data.symbol?.toUpperCase();
+    const limit = parsed.data.limit ?? 50;
 
     // If an exact symbol is requested (e.g. SOLUSDT), analyze just that pair
     if (exactSymbol) {
