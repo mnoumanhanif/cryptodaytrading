@@ -52,7 +52,8 @@ export async function enforceApiRateLimit(workspaceId: string, tier: SaaSTier): 
 
 export async function enforceScannerRateLimit(workspaceId: string, tier: SaaSTier): Promise<{ allowed: boolean; limit: number; count: number }> {
   const limit = TIER_LIMITS[tier].scannerRequestsPerDay;
-  const dayBucket = new Date().toISOString().slice(0, 10);
+  const now = new Date();
+  const dayBucket = `${now.getUTCFullYear()}-${String(now.getUTCMonth() + 1).padStart(2, '0')}-${String(now.getUTCDate()).padStart(2, '0')}`;
   const key = `rl:scanner:${workspaceId}:${dayBucket}`;
   const count = await incrementWithExpiry(key, 24 * 60 * 60);
 

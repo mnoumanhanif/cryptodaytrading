@@ -139,9 +139,6 @@ export async function GET(request: Request) {
     const exchanges = parseRequestedExchanges(searchParams);
     const symbolParam = parsed.data.symbol?.toUpperCase().trim();
     if (symbolParam) {
-      if (!/^[A-Z0-9]+$/.test(symbolParam)) {
-        return NextResponse.json({ error: 'Invalid symbol format' }, { status: 400 });
-      }
       const symbol = symbolParam.endsWith('USDT') ? symbolParam : `${symbolParam}USDT`;
       const tickerResults = await Promise.allSettled(
         exchanges.map(async (exchange) => ({

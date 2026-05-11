@@ -61,8 +61,8 @@ export async function POST(request: Request) {
   try {
     const contextOrResponse = requireRequestContext(request);
     if (contextOrResponse instanceof NextResponse) return contextOrResponse;
-    const adminError = requireAdminRole(contextOrResponse);
-    if (adminError) return adminError;
+    const adminResponse = requireAdminRole(contextOrResponse);
+    if (adminResponse) return adminResponse;
 
     const bodyJson: unknown = await request.json();
     const parsed = portfolioRiskBodySchema.safeParse(bodyJson);

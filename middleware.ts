@@ -4,6 +4,8 @@ import { ADMIN_ONLY_RULES, AUTH_EXCLUDED_PATHS, SCANNER_PATHS, TIER_LIMITS, type
 import { enforceApiRateLimit, enforceScannerRateLimit } from '@/lib/saas/rateLimit';
 
 const jwks = process.env.CLERK_JWKS_URL ? createRemoteJWKSet(new URL(process.env.CLERK_JWKS_URL)) : null;
+const clerkIssuer = process.env.CLERK_ISSUER;
+const clerkAudience = process.env.CLERK_AUDIENCE;
 
 type AuthResult = {
   userId: string;
@@ -55,10 +57,11 @@ async function authenticate(request: NextRequest): Promise<AuthResult | null> {
   }
 
   if (!jwks) return null;
+  if (!clerkIssuer || !clerkAudience) return null;
 
   const verifyResult = await jwtVerify(token, jwks, {
-    issuer: process.env.CLERK_ISSUER,
-    audience: process.env.CLERK_AUDIENCE,
+    issuer: clerkIssuer,
+    audience: clerkAudience,
   });
 
   const payload = verifyResult.payload;
