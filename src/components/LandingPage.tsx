@@ -295,7 +295,7 @@ function FeaturesSection() {
             Every Tool a Day Trader Needs
           </h2>
           <p className="mt-3 text-gray-400">
-            Twelve specialised tabs across five categories — all in one place.
+            Twelve specialised tabs across six categories — all in one place.
           </p>
         </div>
 
@@ -499,7 +499,7 @@ function CtaBanner() {
             Ready to trade smarter?
           </h2>
           <p className="relative mt-4 text-lg text-gray-400">
-            Join thousands of traders using CryptoScanner to find high-confidence setups every day.
+            Join traders worldwide using CryptoScanner to find high-confidence setups every day.
           </p>
           <div className="relative mt-8 flex flex-wrap items-center justify-center gap-4">
             <Link
