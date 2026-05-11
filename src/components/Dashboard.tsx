@@ -24,6 +24,7 @@ import { usePortfolioNotifications } from '@/hooks/usePortfolioNotifications';
 import { SupportedExchange } from '@/lib/exchangeMarket';
 import { CoinAnalysis } from '@/lib/types';
 import { MIN_CONFIDENCE_THRESHOLD, MIN_RR_FIRST_TRADE, TRENDING_MARKET_REGIME } from '@/lib/tradeDecisionConfig';
+import { useAuth } from '@/contexts/AuthContext';
 
 type ApiKeyOptionId = SupportedExchange | 'coingecko';
 
@@ -1108,6 +1109,7 @@ function ExchangeSelector({
 
 // ── Dashboard ────────────────────────────────────────────────
 export default function Dashboard() {
+  const { user, signOut } = useAuth();
   const [selectedExchanges, setSelectedExchanges] = useState<SupportedExchange[]>([DEFAULT_EXCHANGE]);
   const [isCoinGeckoKeySelected, setIsCoinGeckoKeySelected] = useState(false);
   const effectiveSelectedExchanges = useMemo(
@@ -2228,6 +2230,21 @@ export default function Dashboard() {
                 />
               </svg>
             </button>
+
+            {user && (
+              <div className="flex items-center gap-2">
+                <span className="text-xs text-gray-400 hidden lg:inline truncate max-w-[140px]" title={user.email}>
+                  {user.email}
+                </span>
+                <button
+                  onClick={() => void signOut()}
+                  className="px-2.5 py-1.5 rounded bg-gray-800 hover:bg-gray-700 transition-colors text-xs text-gray-300"
+                  title="Sign out"
+                >
+                  Sign Out
+                </button>
+              </div>
+            )}
           </div>
         </div>
       </header>
