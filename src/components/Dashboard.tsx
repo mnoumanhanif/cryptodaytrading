@@ -2200,6 +2200,14 @@ export default function Dashboard() {
               AI Decisions
             </a>
 
+            <a
+              href="/opportunities"
+              className="px-2.5 py-1.5 rounded bg-emerald-600/90 hover:bg-emerald-500 transition-colors text-xs font-medium text-white"
+              title="Open High Opportunity page"
+            >
+              High Opportunity
+            </a>
+
             <button
               onClick={() => void refetch(trackedCustomSymbols)}
               disabled={loading}

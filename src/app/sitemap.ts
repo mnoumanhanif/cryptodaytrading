@@ -4,7 +4,7 @@ import { siteUrl } from '@/lib/siteUrl';
 const changeFrequency: MetadataRoute.Sitemap[number]['changeFrequency'] = 'daily';
 
 export default function sitemap(): MetadataRoute.Sitemap {
-  const routes = ['/', '/decisions'];
+  const routes = ['/', '/decisions', '/opportunities'];
 
   return routes.map((route) => ({
     url: `${siteUrl}${route}`,
