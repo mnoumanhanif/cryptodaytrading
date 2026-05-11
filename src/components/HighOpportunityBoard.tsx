@@ -27,9 +27,20 @@ const OPPORTUNITY_WEIGHTS = {
   trend: 0.15,
   riskReward: 0.1,
 };
+const TREND_SCORE = {
+  bullish: 100,
+  neutral: 55,
+  bearish: 20,
+};
 
 function symbolName(symbol: string): string {
   return symbol.replace('USDT', '');
+}
+
+function signalSentimentMultiplier(signal: CoinAnalysis['signal']): number {
+  if (signal === 'BUY') return 1;
+  if (signal === 'SELL') return -1;
+  return 0;
 }
 
 function moveBadgeClass(value: number): string {
@@ -75,7 +86,7 @@ export default function HighOpportunityBoard() {
         .filter((coin) => (coin.indicators.volume?.volumeRatio ?? 0) >= 1.8 && coin.signal === 'BUY')
         .map((coin) => {
           const estimatedUsd = (coin.indicators.volume?.currentVolume ?? 0) * coin.price;
-          const confidence = Math.min(99, Math.round((coin.indicators.volume?.volumeRatio ?? 0) * VOLUME_RATIO_CONFIDENCE_MULTIPLIER));
+          const confidence = Math.min(100, Math.round((coin.indicators.volume?.volumeRatio ?? 0) * VOLUME_RATIO_CONFIDENCE_MULTIPLIER));
           return { coin, estimatedUsd, confidence };
         })
         .sort((a, b) => b.estimatedUsd - a.estimatedUsd)
@@ -91,7 +102,7 @@ export default function HighOpportunityBoard() {
         .map((coin) => {
           const sentiment = Math.max(
             -100,
-            Math.min(100, Math.round((coin.signal === 'SELL' ? -1 : coin.signal === 'BUY' ? 1 : 0) * coin.score))
+            Math.min(100, Math.round(signalSentimentMultiplier(coin.signal) * coin.score))
           );
           const trendScore = Math.min(
             100,
@@ -115,7 +126,12 @@ export default function HighOpportunityBoard() {
         .map((coin) => {
           const moveScore = Math.min(100, Math.abs(coin.priceChangePercent) * OPPORTUNITY_MOVE_MULTIPLIER);
           const volumeScore = Math.min(100, (coin.indicators.volume?.volumeRatio ?? 0) * OPPORTUNITY_VOLUME_MULTIPLIER);
-          const trendScore = coin.indicators.ma.trend === 'bullish' ? 100 : coin.indicators.ma.trend === 'neutral' ? 55 : 20;
+          const trendScore =
+            coin.indicators.ma.trend === 'bullish'
+              ? TREND_SCORE.bullish
+              : coin.indicators.ma.trend === 'neutral'
+                ? TREND_SCORE.neutral
+                : TREND_SCORE.bearish;
           const rrScore = Math.min(100, coin.risk.riskRewardRatio * 20);
           const opportunityScore = Math.round(
             coin.tradeSignal.confidence * OPPORTUNITY_WEIGHTS.confidence +
