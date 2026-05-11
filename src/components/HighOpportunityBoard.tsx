@@ -20,6 +20,9 @@ type ProfitItem = {
 const VOLUME_RATIO_CONFIDENCE_MULTIPLIER = 30;
 const OPPORTUNITY_MOVE_MULTIPLIER = 7;
 const OPPORTUNITY_VOLUME_MULTIPLIER = 30;
+const INTEREST_VOLUME_MULTIPLIER = 35;
+const SOCIAL_TREND_PRICE_MULTIPLIER = 8;
+const SOCIAL_TREND_VOLUME_MULTIPLIER = 20;
 const OPPORTUNITY_WEIGHTS = {
   confidence: 0.35,
   move: 0.2,
@@ -70,7 +73,7 @@ export default function HighOpportunityBoard() {
             Math.min(
               100,
               coin.score * 0.45 +
-                Math.min(100, (coin.indicators.volume?.volumeRatio ?? 0) * 35) * 0.35 +
+                Math.min(100, (coin.indicators.volume?.volumeRatio ?? 0) * INTEREST_VOLUME_MULTIPLIER) * 0.35 +
                 coin.tradeSignal.confidence * 0.2
             )
           ),
@@ -106,7 +109,10 @@ export default function HighOpportunityBoard() {
           );
           const trendScore = Math.min(
             100,
-            Math.round(Math.abs(coin.priceChangePercent) * 8 + (coin.indicators.volume?.volumeRatio ?? 0) * 20)
+            Math.round(
+                Math.abs(coin.priceChangePercent) * SOCIAL_TREND_PRICE_MULTIPLIER +
+                  (coin.indicators.volume?.volumeRatio ?? 0) * SOCIAL_TREND_VOLUME_MULTIPLIER
+              )
           );
           const momentumWord = coin.priceChangePercent >= 0 ? 'bullish' : 'bearish';
 
