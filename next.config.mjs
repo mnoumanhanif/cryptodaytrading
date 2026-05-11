@@ -21,7 +21,7 @@ const nextConfig = {
       "script-src 'self' 'unsafe-inline' 'unsafe-eval'",
       "style-src 'self' 'unsafe-inline'",
       "img-src 'self' data: blob: https:",
-      "connect-src 'self' https://api.binance.com https://api.bybit.com https://api.bitget.com https://api.coingecko.com",
+      "connect-src 'self' https://api.binance.com https://api.bybit.com https://api.bitget.com https://api.coingecko.com https://*.supabase.co",
       "font-src 'self' data:",
       "object-src 'none'",
       'upgrade-insecure-requests',
