@@ -38,7 +38,7 @@ export default function AdminPaymentsPage() {
       const payload = await response.json();
       if (!response.ok) throw new Error(payload?.error ?? 'Failed to load payment approvals');
       setData(payload);
-      setWorkspaceId((current) => (current || !payload.workspaceId ? current : payload.workspaceId));
+      setWorkspaceId((current) => current || payload.workspaceId || '');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load payment approvals');
     } finally {

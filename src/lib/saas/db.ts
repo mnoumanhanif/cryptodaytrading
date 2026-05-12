@@ -168,10 +168,7 @@ export async function insertManualPaymentApproval(params: ManualPaymentApprovalR
     status: params.status,
     reason: params.reason,
     reviewed_by_user_id: params.reviewed_by_user_id,
-    reviewed_at: new Date().toISOString(),
     metadata: params.metadata ?? {},
-    created_at: new Date().toISOString(),
-    updated_at: new Date().toISOString(),
   });
 }
 

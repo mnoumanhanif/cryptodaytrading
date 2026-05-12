@@ -23,7 +23,7 @@ async function syncSubscriptionState(subscription: Stripe.Subscription): Promise
   if (!workspaceId || !customerId) return;
 
   const subscriptionWithPeriod = subscription as Stripe.Subscription & { current_period_end?: number | null };
-  const periodEndSeconds = subscriptionWithPeriod.current_period_end ?? subscription.items.data[0]?.current_period_end ?? null;
+  const periodEndSeconds = subscriptionWithPeriod.current_period_end ?? null;
   const currentPeriodEnd = periodEndSeconds
     ? new Date(periodEndSeconds * 1000).toISOString()
     : null;
