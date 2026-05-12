@@ -86,7 +86,7 @@ export async function middleware(request: NextRequest) {
     userId: 'public-user',
     role: 'user' as const,
     workspaceId: 'public-workspace',
-    tier: 'pro' as const,
+    tier: 'free' as const,
   };
 
   const forwardedHeaders = new Headers(request.headers);

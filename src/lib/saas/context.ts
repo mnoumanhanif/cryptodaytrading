@@ -38,7 +38,7 @@ export function requireRequestContext(request: Request): SaaSRequestContext | Ne
       userId: 'public-user',
       role: 'user',
       workspaceId: 'public-workspace',
-      tier: 'pro',
+      tier: 'free',
     };
   }
   return context;
