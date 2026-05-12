@@ -151,6 +151,21 @@ const PRIMARY_NAV_GROUPS: PrimaryNavGroup[] = [
     tabIds: ['watchlist'],
   },
 ];
+const ALL_DASHBOARD_TABS: DashboardTab[] = [
+  'overview',
+  'heatmap',
+  'scanner',
+  'top500',
+  'patterns',
+  'suggestions',
+  'liquidations',
+  'quicksignals',
+  'liquidationintel',
+  'warnings',
+  'volumewhales',
+  'smartwatchlist',
+  'watchlist',
+];
 
 type CandlePattern = {
   name: string;
@@ -1109,14 +1124,19 @@ function ExchangeSelector({
 
 // ── Dashboard ────────────────────────────────────────────────
 export default function Dashboard() {
-  const { user, signOut } = useAuth();
+  const { user, signOut, role } = useAuth();
+  const isAdmin = role === 'admin';
+  const allowedTabs = useMemo<DashboardTab[]>(() => (isAdmin ? ALL_DASHBOARD_TABS : ['overview']), [isAdmin]);
   const [selectedExchanges, setSelectedExchanges] = useState<SupportedExchange[]>([DEFAULT_EXCHANGE]);
   const [isCoinGeckoKeySelected, setIsCoinGeckoKeySelected] = useState(false);
   const effectiveSelectedExchanges = useMemo(
     () => (selectedExchanges.length > 0 ? [selectedExchanges[0]] : [DEFAULT_EXCHANGE]),
     [selectedExchanges]
   );
-  const { coins, loading, error, hasUnauthorizedError, lastUpdated, totalScanned, refetch } = useMarketData(effectiveSelectedExchanges);
+  const { coins, loading, error, hasUnauthorizedError, lastUpdated, totalScanned, refetch } = useMarketData(
+    effectiveSelectedExchanges,
+    { disabled: !isAdmin }
+  );
   const { items, addCoin, removeCoin, isWatching } = useWatchList();
   const customMarketPairs = useCustomMarketPairs();
   const [addMarketPairOpen, setAddMarketPairOpen] = useState(false);
@@ -1324,15 +1344,24 @@ export default function Dashboard() {
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const tab = params.get('tab') as DashboardTab | null;
-    if (
-      tab &&
-      ['overview', 'heatmap', 'scanner', 'top500', 'patterns', 'suggestions', 'liquidations', 'quicksignals', 'liquidationintel', 'warnings', 'volumewhales', 'smartwatchlist', 'watchlist'].includes(tab)
-    ) {
+    if (tab && allowedTabs.includes(tab)) {
       setActiveTab(tab);
     }
-  }, []);
+  }, [allowedTabs]);
+
+  useEffect(() => {
+    if (!allowedTabs.includes(activeTab)) {
+      setActiveTab('overview');
+      setOpenPrimaryNav(null);
+      const params = new URLSearchParams(window.location.search);
+      params.set('tab', 'overview');
+      params.delete('page');
+      window.history.replaceState({}, '', `?${params.toString()}`);
+    }
+  }, [activeTab, allowedTabs]);
 
   const handleTabChange = (tab: DashboardTab) => {
+    if (!allowedTabs.includes(tab)) return;
     setActiveTab(tab);
     setOpenPrimaryNav(null);
     const params = new URLSearchParams(window.location.search);
@@ -2274,7 +2303,7 @@ export default function Dashboard() {
             Overview
           </button>
 
-          {PRIMARY_NAV_GROUPS.map((group) => {
+          {isAdmin && PRIMARY_NAV_GROUPS.map((group) => {
             const isGroupActive = group.tabIds.some((tabId) => tabId === activeTab);
             const isOpen = openPrimaryNav === group.id;
             return (

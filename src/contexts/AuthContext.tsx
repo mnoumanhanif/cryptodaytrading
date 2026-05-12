@@ -4,9 +4,27 @@ import React, { createContext, useContext, useEffect, useState } from 'react';
 import type { Session, User } from '@supabase/supabase-js';
 import { getSupabaseBrowserClient } from '@/lib/supabase/browserClient';
 
+export type AppRole = 'admin' | 'user';
+
+function normalizeRole(value: unknown): AppRole {
+  const role = String(value ?? '').toLowerCase();
+  return role.includes('admin') ? 'admin' : 'user';
+}
+
+export function getUserRole(user: User | null): AppRole {
+  if (!user) return 'user';
+  return normalizeRole(
+    user.app_metadata?.role ??
+    user.user_metadata?.role ??
+    user.app_metadata?.org_role ??
+    user.user_metadata?.org_role
+  );
+}
+
 type AuthContextValue = {
   session: Session | null;
   user: User | null;
+  role: AppRole;
   loading: boolean;
   signOut: () => Promise<void>;
 };
@@ -14,6 +32,7 @@ type AuthContextValue = {
 const AuthContext = createContext<AuthContextValue>({
   session: null,
   user: null,
+  role: 'user',
   loading: true,
   signOut: async () => {},
 });
@@ -57,7 +76,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   return (
-    <AuthContext.Provider value={{ session, user: session?.user ?? null, loading, signOut }}>
+    <AuthContext.Provider value={{ session, user: session?.user ?? null, role: getUserRole(session?.user ?? null), loading, signOut }}>
       {children}
     </AuthContext.Provider>
   );

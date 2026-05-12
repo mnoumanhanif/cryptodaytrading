@@ -3,7 +3,7 @@ import HighOpportunityBoard from '@/components/HighOpportunityBoard';
 
 export default function OpportunitiesPage() {
   return (
-    <AuthGuard>
+    <AuthGuard adminOnly>
       <HighOpportunityBoard />
     </AuthGuard>
   );
