@@ -38,15 +38,13 @@ export default function AdminPaymentsPage() {
       const payload = await response.json();
       if (!response.ok) throw new Error(payload?.error ?? 'Failed to load payment approvals');
       setData(payload);
-      if (!workspaceId && payload.workspaceId) {
-        setWorkspaceId(payload.workspaceId);
-      }
+      setWorkspaceId((current) => (current || !payload.workspaceId ? current : payload.workspaceId));
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load payment approvals');
     } finally {
       setLoading(false);
     }
-  }, [workspaceId]);
+  }, []);
 
   useEffect(() => {
     void fetchApprovals();
@@ -65,7 +63,7 @@ export default function AdminPaymentsPage() {
     try {
       const response = await fetch('/api/admin/payment-approvals', {
         method: 'POST',
-        headers: { 'content-type': 'application/json' },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           action,
           workspaceId: selectedWorkspace,

@@ -105,9 +105,12 @@ export async function requireAdminPaidAccess(context: SaaSRequestContext, reques
   const adminResponse = await requireAdminRole(context, request);
   if (adminResponse) return adminResponse;
 
+  if (context.tier === 'pro') {
+    return null;
+  }
+
   const billingState = await getWorkspaceBillingState(context.workspaceId);
   const hasPaidAccess =
-    context.tier === 'pro' ||
     billingState?.tier === 'pro' ||
     Boolean(billingState?.hasActiveSubscription);
 

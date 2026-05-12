@@ -22,8 +22,10 @@ async function syncSubscriptionState(subscription: Stripe.Subscription): Promise
   const customerId = typeof subscription.customer === 'string' ? subscription.customer : subscription.customer?.id;
   if (!workspaceId || !customerId) return;
 
-  const currentPeriodEnd = subscription.items.data[0]?.current_period_end
-    ? new Date(subscription.items.data[0].current_period_end * 1000).toISOString()
+  const subscriptionWithPeriod = subscription as Stripe.Subscription & { current_period_end?: number | null };
+  const periodEndSeconds = subscriptionWithPeriod.current_period_end ?? subscription.items.data[0]?.current_period_end ?? null;
+  const currentPeriodEnd = periodEndSeconds
+    ? new Date(periodEndSeconds * 1000).toISOString()
     : null;
   const nextTier = mapStripeStatusToTier(subscription.status);
 
