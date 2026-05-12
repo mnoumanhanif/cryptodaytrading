@@ -7,8 +7,8 @@ import { getSupabaseBrowserClient } from '@/lib/supabase/browserClient';
 export type AppRole = 'admin' | 'user';
 
 function normalizeRole(value: unknown): AppRole {
-  const role = String(value ?? '').toLowerCase();
-  return role.includes('admin') ? 'admin' : 'user';
+  const role = String(value ?? '').trim().toLowerCase();
+  return role === 'admin' ? 'admin' : 'user';
 }
 
 export function getUserRole(user: User | null): AppRole {

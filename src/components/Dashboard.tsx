@@ -1350,6 +1350,7 @@ export default function Dashboard() {
   }, [allowedTabs]);
 
   useEffect(() => {
+    if (activeTab === 'overview') return;
     if (!allowedTabs.includes(activeTab)) {
       setActiveTab('overview');
       setOpenPrimaryNav(null);
