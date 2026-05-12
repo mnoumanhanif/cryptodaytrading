@@ -160,13 +160,16 @@ npm run build
   ```
 - All API routes are protected by auth middleware (except Stripe webhook), with RBAC + per-tier rate/usage limits.
 - Run Supabase SQL bootstrap first: `supabase/migrations/001_saas_foundation.sql`
+- Apply manual-approval migration for admin payment actions: `supabase/migrations/002_payment_approvals.sql`
 
 ### SaaS Security/Operations Checklist (Production)
 - Deploy to Vercel with all secrets in environment variables (never commit secrets).
 - Rotate `SAAS_SERVICE_API_KEY`, Stripe, Supabase, and exchange keys on a schedule and after any exposure event.
-- Configure Clerk JWT claims to include role (`admin|user`), tenant/workspace ID, and tier (`free|pro`).
+- Configure Clerk JWT claims to include both `role` and `org_role` (`admin|user`), workspace ID (`org_id` or `workspace_id`), and tier (`free|pro`).
+- Ensure the same role is also included in frontend session metadata (`app_metadata`/`user_metadata`) so UI and API RBAC stay consistent.
 - Configure Upstash Redis for shared rate limits across instances.
 - Configure Stripe webhook endpoint: `POST /api/stripe/webhook`.
+- Use admin payment operations at `/admin/payments` (API: `GET/POST /api/admin/payment-approvals`) for manual approve/reject flows.
 - Configure Sentry alerts and Vercel Analytics dashboard thresholds for elevated 4xx/5xx and latency spikes.
 - Configure daily automated Supabase backups + quarterly restore drill.
 

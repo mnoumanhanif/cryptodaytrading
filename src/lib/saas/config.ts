@@ -22,6 +22,12 @@ export const TIER_LIMITS: Record<SaaSTier, TierLimits> = {
 
 export const ADMIN_ONLY_RULES: Array<{ path: string; method: string }> = [
   { path: '/api/portfolio-risk', method: 'POST' },
+  { path: '/api/admin/payment-approvals', method: 'GET' },
+  { path: '/api/admin/payment-approvals', method: 'POST' },
+];
+
+export const PRIVILEGED_ACTION_RULES: Array<{ path: string; method: string }> = [
+  { path: '/api/portfolio-risk', method: 'POST' },
 ];
 
 export const AUTH_EXCLUDED_PATHS = new Set<string>(['/api/stripe/webhook']);

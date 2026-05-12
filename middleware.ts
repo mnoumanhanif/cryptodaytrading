@@ -14,12 +14,27 @@ type AuthResult = {
 };
 
 function parseRole(payload: JWTPayload): SaaSRole {
-  const role = String(payload.role ?? payload.org_role ?? payload['https://example.com/role'] ?? 'user').toLowerCase();
+  const role = String(
+    payload.role ??
+      payload.org_role ??
+      payload['https://example.com/role'] ??
+      payload['https://example.com/org_role'] ??
+      payload['https://clerk.dev/role'] ??
+      payload['https://clerk.dev/org_role'] ??
+      'user'
+  ).toLowerCase();
   return role.includes('admin') ? 'admin' : 'user';
 }
 
 function parseTier(payload: JWTPayload): SaaSTier {
-  const tier = String(payload.tier ?? payload.plan ?? payload['https://example.com/tier'] ?? 'free').toLowerCase();
+  const tier = String(
+    payload.tier ??
+      payload.plan ??
+      payload['https://example.com/tier'] ??
+      payload['https://clerk.dev/tier'] ??
+      payload['https://clerk.dev/plan'] ??
+      'free'
+  ).toLowerCase();
   return tier === 'pro' ? 'pro' : 'free';
 }
 
