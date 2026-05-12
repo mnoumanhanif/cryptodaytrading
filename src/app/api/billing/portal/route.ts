@@ -14,7 +14,7 @@ const requestSchema = z.object({
 
 export async function POST(request: Request) {
   try {
-    const contextOrResponse = requireRequestContext(request);
+    const contextOrResponse = await requireRequestContext(request);
     if (contextOrResponse instanceof NextResponse) {
       return contextOrResponse;
     }

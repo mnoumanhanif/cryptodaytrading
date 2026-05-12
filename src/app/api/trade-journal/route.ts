@@ -45,7 +45,7 @@ function buildStatsFromEntries(entries: JournalLikeEntry[]): JournalStatsShape {
 
 export async function GET(request: Request) {
   try {
-    const contextOrResponse = requireRequestContext(request);
+    const contextOrResponse = await requireRequestContext(request);
     if (contextOrResponse instanceof NextResponse) return contextOrResponse;
     const context = contextOrResponse;
 

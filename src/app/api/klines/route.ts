@@ -22,7 +22,7 @@ const klinesQuerySchema = z.object({
 
 export async function GET(request: NextRequest) {
   try {
-    const contextOrResponse = requireRequestContext(request);
+    const contextOrResponse = await requireRequestContext(request);
     if (contextOrResponse instanceof NextResponse) return contextOrResponse;
 
     const { searchParams } = new URL(request.url);

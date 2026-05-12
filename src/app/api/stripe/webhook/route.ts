@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import Stripe from 'stripe';
 import { getStripeClient, mapStripeStatusToTier } from '@/lib/saas/stripe';
-import { upsertSubscription } from '@/lib/saas/db';
+import { appendAuditLog, setWorkspaceTier, upsertSubscription } from '@/lib/saas/db';
 
 export const dynamic = 'force-dynamic';
 export const maxDuration = 15;
@@ -15,6 +15,38 @@ function getWorkspaceIdFromSubscription(subscription: Stripe.Subscription): stri
     return `ws_${customer}`;
   }
   return null;
+}
+
+async function syncSubscriptionState(subscription: Stripe.Subscription): Promise<void> {
+  const workspaceId = getWorkspaceIdFromSubscription(subscription);
+  const customerId = typeof subscription.customer === 'string' ? subscription.customer : subscription.customer?.id;
+  if (!workspaceId || !customerId) return;
+
+  const currentPeriodEnd = subscription.items.data[0]?.current_period_end
+    ? new Date(subscription.items.data[0].current_period_end * 1000).toISOString()
+    : null;
+  const nextTier = mapStripeStatusToTier(subscription.status);
+
+  await upsertSubscription({
+    workspaceId,
+    stripeCustomerId: customerId,
+    stripeSubscriptionId: subscription.id,
+    status: subscription.status,
+    priceId: subscription.items.data[0]?.price.id ?? null,
+    currentPeriodEnd,
+    tier: nextTier,
+  });
+  await setWorkspaceTier(workspaceId, nextTier);
+  await appendAuditLog({
+    workspaceId,
+    userId: 'stripe-webhook',
+    action: 'billing.subscription_synced',
+    metadata: {
+      subscriptionId: subscription.id,
+      status: subscription.status,
+      tier: nextTier,
+    },
+  });
 }
 
 export async function POST(request: Request) {
@@ -37,23 +69,41 @@ export async function POST(request: Request) {
 
     if (event.type === 'customer.subscription.created' || event.type === 'customer.subscription.updated' || event.type === 'customer.subscription.deleted') {
       const subscription = event.data.object as Stripe.Subscription;
-      const workspaceId = getWorkspaceIdFromSubscription(subscription);
-      const customerId = typeof subscription.customer === 'string' ? subscription.customer : subscription.customer?.id;
+      await syncSubscriptionState(subscription);
+    }
 
-      if (workspaceId && customerId) {
-        const currentPeriodEnd = subscription.items.data[0]?.current_period_end
-          ? new Date(subscription.items.data[0].current_period_end * 1000).toISOString()
-          : null;
+    if (event.type === 'invoice.payment_succeeded' || event.type === 'invoice.payment_failed') {
+      const invoice = event.data.object as Stripe.Invoice;
+      const subscriptionId =
+        typeof invoice.subscription === 'string' ? invoice.subscription : invoice.subscription?.id ?? null;
+      if (subscriptionId) {
+        const subscription = await stripe.subscriptions.retrieve(subscriptionId);
+        await syncSubscriptionState(subscription);
+      } else {
+        const workspaceId = invoice.metadata?.workspace_id ?? null;
+        if (workspaceId) {
+          const nextTier = event.type === 'invoice.payment_succeeded' ? 'pro' : 'free';
+          await setWorkspaceTier(workspaceId, nextTier);
+          await appendAuditLog({
+            workspaceId,
+            userId: 'stripe-webhook',
+            action: `billing.${event.type}`,
+            metadata: {
+              invoiceId: invoice.id,
+              tier: nextTier,
+            },
+          });
+        }
+      }
+    }
 
-        await upsertSubscription({
-          workspaceId,
-          stripeCustomerId: customerId,
-          stripeSubscriptionId: subscription.id,
-          status: subscription.status,
-          priceId: subscription.items.data[0]?.price.id ?? null,
-          currentPeriodEnd,
-          tier: mapStripeStatusToTier(subscription.status),
-        });
+    if (event.type === 'checkout.session.completed') {
+      const session = event.data.object as Stripe.Checkout.Session;
+      const subscriptionId =
+        typeof session.subscription === 'string' ? session.subscription : session.subscription?.id ?? null;
+      if (subscriptionId) {
+        const subscription = await stripe.subscriptions.retrieve(subscriptionId);
+        await syncSubscriptionState(subscription);
       }
     }
 

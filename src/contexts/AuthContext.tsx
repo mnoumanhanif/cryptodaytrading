@@ -13,11 +13,17 @@ function normalizeRole(value: unknown): AppRole {
 
 export function getUserRole(user: User | null): AppRole {
   if (!user) return 'user';
+  const appClaims = user.app_metadata?.claims as Record<string, unknown> | undefined;
+  const userClaims = user.user_metadata?.claims as Record<string, unknown> | undefined;
   return normalizeRole(
     user.app_metadata?.role ??
     user.user_metadata?.role ??
     user.app_metadata?.org_role ??
-    user.user_metadata?.org_role
+    user.user_metadata?.org_role ??
+    appClaims?.role ??
+    appClaims?.org_role ??
+    userClaims?.role ??
+    userClaims?.org_role
   );
 }
 

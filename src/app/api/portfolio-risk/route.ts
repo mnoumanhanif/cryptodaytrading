@@ -14,7 +14,7 @@ import {
   DEFAULT_PORTFOLIO_RISK_CONFIG,
 } from '@/lib/portfolioRisk';
 import { z } from 'zod';
-import { requireAdminRole, requireRequestContext } from '@/lib/saas/context';
+import { requireAdminPaidAccess, requireRequestContext } from '@/lib/saas/context';
 import { badRequestFromZod } from '@/lib/saas/validation';
 import { appendAuditLog } from '@/lib/saas/db';
 import { getPortfolioStateByWorkspace, upsertPortfolioStateByWorkspace } from '@/lib/saas/db';
@@ -31,7 +31,7 @@ const portfolioRiskBodySchema = z.object({
 
 export async function GET(request: Request) {
   try {
-    const contextOrResponse = requireRequestContext(request);
+    const contextOrResponse = await requireRequestContext(request);
     if (contextOrResponse instanceof NextResponse) return contextOrResponse;
     const context = contextOrResponse;
 
@@ -59,10 +59,10 @@ export async function GET(request: Request) {
 
 export async function POST(request: Request) {
   try {
-    const contextOrResponse = requireRequestContext(request);
+    const contextOrResponse = await requireRequestContext(request);
     if (contextOrResponse instanceof NextResponse) return contextOrResponse;
-    const adminResponse = requireAdminRole(contextOrResponse);
-    if (adminResponse) return adminResponse;
+    const accessResponse = await requireAdminPaidAccess(contextOrResponse, request);
+    if (accessResponse) return accessResponse;
 
     const bodyJson: unknown = await request.json();
     const parsed = portfolioRiskBodySchema.safeParse(bodyJson);
