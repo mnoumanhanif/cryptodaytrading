@@ -84,7 +84,7 @@ export async function middleware(request: NextRequest) {
 
   const auth = (await authenticate(request).catch(() => null)) ?? {
     userId: 'public-user',
-    role: 'admin' as const,
+    role: 'user' as const,
     workspaceId: 'public-workspace',
     tier: 'pro' as const,
   };

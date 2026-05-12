@@ -36,7 +36,7 @@ export function requireRequestContext(request: Request): SaaSRequestContext | Ne
     return {
       requestId: crypto.randomUUID(),
       userId: 'public-user',
-      role: 'admin',
+      role: 'user',
       workspaceId: 'public-workspace',
       tier: 'pro',
     };
@@ -44,7 +44,6 @@ export function requireRequestContext(request: Request): SaaSRequestContext | Ne
   return context;
 }
 
-export function requireAdminRole(context: SaaSRequestContext): NextResponse | null {
-  void context;
+export function requireAdminRole(_context: SaaSRequestContext): NextResponse | null {
   return null;
 }
