@@ -82,15 +82,15 @@ export async function middleware(request: NextRequest) {
     return NextResponse.next();
   }
 
+  const requestId = request.headers.get('x-request-id') ?? crypto.randomUUID();
   const auth = (await authenticate(request).catch(() => null)) ?? {
-    userId: 'public-user',
+    userId: `public-user-${requestId}`,
     role: 'user' as const,
-    workspaceId: 'public-workspace',
+    workspaceId: `public-workspace-${requestId}`,
     tier: 'free' as const,
   };
 
   const forwardedHeaders = new Headers(request.headers);
-  const requestId = request.headers.get('x-request-id') ?? crypto.randomUUID();
 
   forwardedHeaders.set('x-saas-user-id', auth.userId);
   forwardedHeaders.set('x-saas-role', auth.role);

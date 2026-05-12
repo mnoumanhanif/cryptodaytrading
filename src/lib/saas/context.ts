@@ -33,11 +33,12 @@ export function getRequestContext(request: Request): SaaSRequestContext | null {
 export function requireRequestContext(request: Request): SaaSRequestContext | NextResponse {
   const context = getRequestContext(request);
   if (!context) {
+    const requestId = crypto.randomUUID();
     return {
-      requestId: crypto.randomUUID(),
-      userId: 'public-user',
+      requestId,
+      userId: `public-user-${requestId}`,
       role: 'user',
-      workspaceId: 'public-workspace',
+      workspaceId: `public-workspace-${requestId}`,
       tier: 'free',
     };
   }
