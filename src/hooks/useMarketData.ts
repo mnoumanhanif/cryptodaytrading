@@ -54,10 +54,26 @@ export function useMarketData(selectedExchanges: SupportedExchange[] = ['binance
       const exchangesParam = selectedExchanges.join(',');
       const data: ScannerResponse = isStaticExport
         ? await fetchFromBinance()
-        : await fetch(`/api/scanner?exchanges=${encodeURIComponent(exchangesParam)}&limit=1000`).then((res) => {
-            if (!res.ok) throw new Error(`HTTP ${res.status}`);
-            return res.json();
-          });
+        : await fetch(`/api/scanner?exchanges=${encodeURIComponent(exchangesParam)}&limit=1000`, { cache: 'no-store' }).then(
+            async (res) => {
+              if (!res.ok) {
+                let message = `HTTP ${res.status}`;
+                if (res.status === 401) {
+                  message = 'Unauthorized. Please sign in again.';
+                }
+
+                try {
+                  const payload = (await res.json()) as { error?: string };
+                  if (payload.error) message = payload.error;
+                } catch {
+                  // Ignore JSON parse errors and keep generic message
+                }
+
+                throw new Error(message);
+              }
+              return res.json();
+            }
+          );
       let mergedCoins = data.coins;
 
       if (!isStaticExport && customSymbols.length > 0) {
@@ -109,11 +125,15 @@ export function useMarketData(selectedExchanges: SupportedExchange[] = ['binance
     }
   }, [selectedExchanges]);
 
+  const hasUnauthorizedError = !!error && (error.toLowerCase().includes('unauthorized') || error.toLowerCase().includes('http 401'));
+
   useEffect(() => {
-    fetchData();
+    if (hasUnauthorizedError) return;
+
+    void fetchData();
     const interval = setInterval(fetchData, REFRESH_INTERVAL_MS);
     return () => clearInterval(interval);
-  }, [fetchData]);
+  }, [fetchData, hasUnauthorizedError]);
 
-  return { coins, loading, error, lastUpdated, totalScanned, refetch: fetchData };
+  return { coins, loading, error, hasUnauthorizedError, lastUpdated, totalScanned, refetch: fetchData };
 }

@@ -1116,7 +1116,7 @@ export default function Dashboard() {
     () => (selectedExchanges.length > 0 ? [selectedExchanges[0]] : [DEFAULT_EXCHANGE]),
     [selectedExchanges]
   );
-  const { coins, loading, error, lastUpdated, totalScanned, refetch } = useMarketData(effectiveSelectedExchanges);
+  const { coins, loading, error, hasUnauthorizedError, lastUpdated, totalScanned, refetch } = useMarketData(effectiveSelectedExchanges);
   const { items, addCoin, removeCoin, isWatching } = useWatchList();
   const customMarketPairs = useCustomMarketPairs();
   const [addMarketPairOpen, setAddMarketPairOpen] = useState(false);
@@ -2255,7 +2255,7 @@ export default function Dashboard() {
       {error && (
         <div className="max-w-7xl mx-auto px-4 mt-4">
           <div className="bg-red-500/10 border border-red-500/30 rounded-lg px-4 py-3 text-red-400 text-sm">
-            ⚠ {error}. Data may be stale. Auto-retrying...
+            {hasUnauthorizedError ? `⚠ ${error}` : `⚠ ${error}. Data may be stale. Auto-retrying...`}
           </div>
         </div>
       )}
