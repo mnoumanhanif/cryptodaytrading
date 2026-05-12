@@ -53,7 +53,11 @@ export function useMarketData(
   const [totalScanned, setTotalScanned] = useState(0);
 
   const fetchData = useCallback(async (customSymbols: string[] = []) => {
-    if (disabled) return;
+    if (disabled) {
+      setError(null);
+      setLoading(false);
+      return;
+    }
     try {
       setError(null);
       const exchangesParam = selectedExchanges.join(',');
