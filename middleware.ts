@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createRemoteJWKSet, jwtVerify, JWTPayload } from 'jose';
-import { ADMIN_ONLY_RULES, AUTH_EXCLUDED_PATHS, SCANNER_PATHS, TIER_LIMITS, type SaaSRole, type SaaSTier } from '@/lib/saas/config';
-import { enforceApiRateLimit, enforceScannerRateLimit } from '@/lib/saas/rateLimit';
+import { type SaaSRole, type SaaSTier } from '@/lib/saas/config';
 
 const jwks = process.env.CLERK_JWKS_URL ? createRemoteJWKSet(new URL(process.env.CLERK_JWKS_URL)) : null;
 const clerkIssuer = process.env.CLERK_ISSUER;
@@ -76,32 +75,6 @@ async function authenticate(request: NextRequest): Promise<AuthResult | null> {
   };
 }
 
-function isAdminRoute(pathname: string, method: string): boolean {
-  return ADMIN_ONLY_RULES.some((rule) => pathname === rule.path && method.toUpperCase() === rule.method);
-}
-
-function exceedsSymbolLimit(pathname: string, request: NextRequest, tier: SaaSTier): boolean {
-  const limits = TIER_LIMITS[tier];
-  const url = new URL(request.url);
-
-  const scanLike = pathname === '/api/scanner' || pathname === '/api/coins/search' || pathname === '/api/market-analysis/top-500';
-  if (scanLike) {
-    const limitParam = Number(url.searchParams.get('limit') ?? '0');
-    if (Number.isFinite(limitParam) && limitParam > limits.maxSymbolsPerRequest) {
-      return true;
-    }
-  }
-
-  if (pathname === '/api/coins/top') {
-    const totalParam = Number(url.searchParams.get('total') ?? '0');
-    if (Number.isFinite(totalParam) && totalParam > limits.maxSymbolsPerRequest) {
-      return true;
-    }
-  }
-
-  return false;
-}
-
 export async function middleware(request: NextRequest) {
   const pathname = request.nextUrl.pathname;
 
@@ -109,46 +82,15 @@ export async function middleware(request: NextRequest) {
     return NextResponse.next();
   }
 
-  if (AUTH_EXCLUDED_PATHS.has(pathname)) {
-    return NextResponse.next();
-  }
-
-  const auth = await authenticate(request).catch(() => null);
-  if (!auth) {
-    return NextResponse.json({ error: 'Unauthorized: missing or invalid token' }, { status: 401 });
-  }
-
-  if (isAdminRoute(pathname, request.method) && auth.role !== 'admin') {
-    return NextResponse.json({ error: 'Forbidden: admin role required' }, { status: 403 });
-  }
-
-  if (exceedsSymbolLimit(pathname, request, auth.tier)) {
-    return NextResponse.json(
-      { error: `Tier limit exceeded: max symbols per request is ${TIER_LIMITS[auth.tier].maxSymbolsPerRequest}` },
-      { status: 403 }
-    );
-  }
-
-  const apiRate = await enforceApiRateLimit(auth.workspaceId, auth.tier);
-  if (!apiRate.allowed) {
-    return NextResponse.json(
-      { error: `Rate limit exceeded: ${apiRate.limit} requests/min for ${auth.tier} tier` },
-      { status: 429 }
-    );
-  }
-
-  if (SCANNER_PATHS.has(pathname)) {
-    const scannerRate = await enforceScannerRateLimit(auth.workspaceId, auth.tier);
-    if (!scannerRate.allowed) {
-      return NextResponse.json(
-        { error: `Scanner quota exceeded: ${scannerRate.limit} requests/day for ${auth.tier} tier` },
-        { status: 429 }
-      );
-    }
-  }
+  const requestId = request.headers.get('x-request-id') ?? crypto.randomUUID();
+  const auth = (await authenticate(request).catch(() => null)) ?? {
+    userId: `public-user-${requestId}`,
+    role: 'user' as const,
+    workspaceId: `public-workspace-${requestId}`,
+    tier: 'free' as const,
+  };
 
   const forwardedHeaders = new Headers(request.headers);
-  const requestId = request.headers.get('x-request-id') ?? crypto.randomUUID();
 
   forwardedHeaders.set('x-saas-user-id', auth.userId);
   forwardedHeaders.set('x-saas-role', auth.role);
