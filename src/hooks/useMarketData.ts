@@ -41,7 +41,11 @@ async function fetchFromBinance(): Promise<ScannerResponse> {
   return { coins, timestamp: Date.now(), totalScanned: tickers.length };
 }
 
-export function useMarketData(selectedExchanges: SupportedExchange[] = ['binance']) {
+export function useMarketData(
+  selectedExchanges: SupportedExchange[] = ['binance'],
+  options: { disabled?: boolean } = {}
+) {
+  const disabled = options.disabled ?? false;
   const [coins, setCoins] = useState<CoinAnalysis[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -49,6 +53,11 @@ export function useMarketData(selectedExchanges: SupportedExchange[] = ['binance
   const [totalScanned, setTotalScanned] = useState(0);
 
   const fetchData = useCallback(async (customSymbols: string[] = []) => {
+    if (disabled) {
+      setError(null);
+      setLoading(false);
+      return;
+    }
     try {
       setError(null);
       const exchangesParam = selectedExchanges.join(',');
@@ -123,17 +132,25 @@ export function useMarketData(selectedExchanges: SupportedExchange[] = ['binance
     } finally {
       setLoading(false);
     }
-  }, [selectedExchanges]);
+  }, [selectedExchanges, disabled]);
 
   const hasUnauthorizedError = !!error && (error.toLowerCase().includes('unauthorized') || error.toLowerCase().includes('http 401'));
 
   useEffect(() => {
+    if (disabled) {
+      setCoins([]);
+      setLoading(false);
+      setError(null);
+      setLastUpdated(0);
+      setTotalScanned(0);
+      return;
+    }
     if (hasUnauthorizedError) return;
 
     void fetchData();
     const interval = setInterval(fetchData, REFRESH_INTERVAL_MS);
     return () => clearInterval(interval);
-  }, [fetchData, hasUnauthorizedError]);
+  }, [fetchData, hasUnauthorizedError, disabled]);
 
   return { coins, loading, error, hasUnauthorizedError, lastUpdated, totalScanned, refetch: fetchData };
 }

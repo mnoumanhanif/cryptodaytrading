@@ -3,7 +3,7 @@ import AiDecisionBoard from '@/components/AiDecisionBoard';
 
 export default function DecisionsPage() {
   return (
-    <AuthGuard>
+    <AuthGuard adminOnly>
       <AiDecisionBoard />
     </AuthGuard>
   );

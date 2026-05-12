@@ -4,15 +4,26 @@ import { useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/contexts/AuthContext';
 
-export default function AuthGuard({ children }: { children: React.ReactNode }) {
-  const { session, loading } = useAuth();
+export default function AuthGuard({
+  children,
+  adminOnly = false,
+  nonAdminRedirect = '/dashboard?tab=overview',
+}: {
+  children: React.ReactNode;
+  adminOnly?: boolean;
+  nonAdminRedirect?: string;
+}) {
+  const { session, loading, role } = useAuth();
   const router = useRouter();
 
   useEffect(() => {
     if (!loading && !session) {
       router.replace('/login');
     }
-  }, [session, loading, router]);
+    if (!loading && session && adminOnly && role !== 'admin') {
+      router.replace(nonAdminRedirect);
+    }
+  }, [session, loading, router, adminOnly, role, nonAdminRedirect]);
 
   if (loading) {
     return (
@@ -23,6 +34,10 @@ export default function AuthGuard({ children }: { children: React.ReactNode }) {
   }
 
   if (!session) {
+    return null;
+  }
+
+  if (adminOnly && role !== 'admin') {
     return null;
   }
 
