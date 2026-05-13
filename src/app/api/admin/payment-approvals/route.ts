@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { z } from 'zod';
-import { requireAdminRole, requireRequestContext } from '@/lib/saas/context';
+import { requireRequestContext } from '@/lib/saas/context';
 import {
   appendAuditLog,
   getWorkspaceBillingState,
@@ -23,9 +23,6 @@ export async function GET(request: Request) {
   try {
     const contextOrResponse = await requireRequestContext(request);
     if (contextOrResponse instanceof NextResponse) return contextOrResponse;
-
-    const adminResponse = await requireAdminRole(contextOrResponse, request);
-    if (adminResponse) return adminResponse;
 
     const { searchParams } = new URL(request.url);
     const workspaceId = searchParams.get('workspaceId')?.trim() || contextOrResponse.workspaceId;
@@ -51,9 +48,6 @@ export async function POST(request: Request) {
   try {
     const contextOrResponse = await requireRequestContext(request);
     if (contextOrResponse instanceof NextResponse) return contextOrResponse;
-
-    const adminResponse = await requireAdminRole(contextOrResponse, request);
-    if (adminResponse) return adminResponse;
 
     const bodyJson: unknown = await request.json();
     const parsed = postSchema.safeParse(bodyJson);

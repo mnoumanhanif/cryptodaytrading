@@ -1124,9 +1124,7 @@ function ExchangeSelector({
 
 // ── Dashboard ────────────────────────────────────────────────
 export default function Dashboard() {
-  const { user, signOut, role } = useAuth();
-  const isAdmin = role === 'admin';
-  const allowedTabs = useMemo<DashboardTab[]>(() => (isAdmin ? ALL_DASHBOARD_TABS : ['overview']), [isAdmin]);
+  const { user, signOut } = useAuth();
   const [selectedExchanges, setSelectedExchanges] = useState<SupportedExchange[]>([DEFAULT_EXCHANGE]);
   const [isCoinGeckoKeySelected, setIsCoinGeckoKeySelected] = useState(false);
   const effectiveSelectedExchanges = useMemo(
@@ -1135,7 +1133,7 @@ export default function Dashboard() {
   );
   const { coins, loading, error, hasUnauthorizedError, lastUpdated, totalScanned, refetch } = useMarketData(
     effectiveSelectedExchanges,
-    { disabled: !isAdmin }
+    { disabled: false }
   );
   const { items, addCoin, removeCoin, isWatching } = useWatchList();
   const customMarketPairs = useCustomMarketPairs();
@@ -1344,14 +1342,14 @@ export default function Dashboard() {
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const tab = params.get('tab') as DashboardTab | null;
-    if (tab && allowedTabs.includes(tab)) {
+    if (tab && ALL_DASHBOARD_TABS.includes(tab)) {
       setActiveTab(tab);
     }
-  }, [allowedTabs]);
+  }, []);
 
   useEffect(() => {
     if (activeTab === 'overview') return;
-    if (!allowedTabs.includes(activeTab)) {
+    if (!ALL_DASHBOARD_TABS.includes(activeTab)) {
       setActiveTab('overview');
       setOpenPrimaryNav(null);
       const params = new URLSearchParams(window.location.search);
@@ -1359,10 +1357,10 @@ export default function Dashboard() {
       params.delete('page');
       window.history.replaceState({}, '', `?${params.toString()}`);
     }
-  }, [activeTab, allowedTabs]);
+  }, [activeTab]);
 
   const handleTabChange = (tab: DashboardTab) => {
-    if (!allowedTabs.includes(tab)) return;
+    if (!ALL_DASHBOARD_TABS.includes(tab)) return;
     setActiveTab(tab);
     setOpenPrimaryNav(null);
     const params = new URLSearchParams(window.location.search);
@@ -2304,7 +2302,7 @@ export default function Dashboard() {
             Overview
           </button>
 
-          {isAdmin && PRIMARY_NAV_GROUPS.map((group) => {
+          {PRIMARY_NAV_GROUPS.map((group) => {
             const isGroupActive = group.tabIds.some((tabId) => tabId === activeTab);
             const isOpen = openPrimaryNav === group.id;
             return (
