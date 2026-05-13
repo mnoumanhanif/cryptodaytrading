@@ -336,7 +336,7 @@ export default function AiDecisionBoard() {
 
           <div className="flex items-center gap-2">
             <a
-              href="/"
+              href="/dashboard"
               className="rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm text-gray-200 transition hover:bg-white/10"
             >
               Dashboard
