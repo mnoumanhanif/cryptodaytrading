@@ -180,7 +180,7 @@ export default function HighOpportunityBoard() {
           </div>
           <div className="flex items-center gap-2">
             <a
-              href="/"
+              href="/dashboard"
               className="px-2.5 py-1.5 rounded bg-gray-800 hover:bg-gray-700 transition-colors text-xs font-medium"
             >
               Dashboard
