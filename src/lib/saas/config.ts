@@ -20,11 +20,7 @@ export const TIER_LIMITS: Record<SaaSTier, TierLimits> = {
   },
 };
 
-export const ADMIN_ONLY_RULES: Array<{ path: string; method: string }> = [
-  { path: '/api/portfolio-risk', method: 'POST' },
-  { path: '/api/admin/payment-approvals', method: 'GET' },
-  { path: '/api/admin/payment-approvals', method: 'POST' },
-];
+export const ADMIN_ONLY_RULES: Array<{ path: string; method: string }> = [];
 
 export const PRIVILEGED_ACTION_RULES: Array<{ path: string; method: string }> = [
   { path: '/api/portfolio-risk', method: 'POST' },

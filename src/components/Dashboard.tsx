@@ -1124,9 +1124,8 @@ function ExchangeSelector({
 
 // ── Dashboard ────────────────────────────────────────────────
 export default function Dashboard() {
-  const { user, signOut, role } = useAuth();
-  const isAdmin = role === 'admin';
-  const allowedTabs = useMemo<DashboardTab[]>(() => (isAdmin ? ALL_DASHBOARD_TABS : ['overview']), [isAdmin]);
+  const { user, signOut } = useAuth();
+  const allowedTabs = ALL_DASHBOARD_TABS;
   const [selectedExchanges, setSelectedExchanges] = useState<SupportedExchange[]>([DEFAULT_EXCHANGE]);
   const [isCoinGeckoKeySelected, setIsCoinGeckoKeySelected] = useState(false);
   const effectiveSelectedExchanges = useMemo(
@@ -1135,7 +1134,7 @@ export default function Dashboard() {
   );
   const { coins, loading, error, hasUnauthorizedError, lastUpdated, totalScanned, refetch } = useMarketData(
     effectiveSelectedExchanges,
-    { disabled: !isAdmin }
+    { disabled: false }
   );
   const { items, addCoin, removeCoin, isWatching } = useWatchList();
   const customMarketPairs = useCustomMarketPairs();
@@ -2304,7 +2303,7 @@ export default function Dashboard() {
             Overview
           </button>
 
-          {isAdmin && PRIMARY_NAV_GROUPS.map((group) => {
+          {PRIMARY_NAV_GROUPS.map((group) => {
             const isGroupActive = group.tabIds.some((tabId) => tabId === activeTab);
             const isOpen = openPrimaryNav === group.id;
             return (
