@@ -1125,7 +1125,6 @@ function ExchangeSelector({
 // ── Dashboard ────────────────────────────────────────────────
 export default function Dashboard() {
   const { user, signOut } = useAuth();
-  const allowedTabs = ALL_DASHBOARD_TABS;
   const [selectedExchanges, setSelectedExchanges] = useState<SupportedExchange[]>([DEFAULT_EXCHANGE]);
   const [isCoinGeckoKeySelected, setIsCoinGeckoKeySelected] = useState(false);
   const effectiveSelectedExchanges = useMemo(
@@ -1343,14 +1342,14 @@ export default function Dashboard() {
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const tab = params.get('tab') as DashboardTab | null;
-    if (tab && allowedTabs.includes(tab)) {
+    if (tab && ALL_DASHBOARD_TABS.includes(tab)) {
       setActiveTab(tab);
     }
-  }, [allowedTabs]);
+  }, []);
 
   useEffect(() => {
     if (activeTab === 'overview') return;
-    if (!allowedTabs.includes(activeTab)) {
+    if (!ALL_DASHBOARD_TABS.includes(activeTab)) {
       setActiveTab('overview');
       setOpenPrimaryNav(null);
       const params = new URLSearchParams(window.location.search);
@@ -1358,10 +1357,10 @@ export default function Dashboard() {
       params.delete('page');
       window.history.replaceState({}, '', `?${params.toString()}`);
     }
-  }, [activeTab, allowedTabs]);
+  }, [activeTab]);
 
   const handleTabChange = (tab: DashboardTab) => {
-    if (!allowedTabs.includes(tab)) return;
+    if (!ALL_DASHBOARD_TABS.includes(tab)) return;
     setActiveTab(tab);
     setOpenPrimaryNav(null);
     const params = new URLSearchParams(window.location.search);

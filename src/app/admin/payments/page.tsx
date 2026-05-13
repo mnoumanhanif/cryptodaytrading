@@ -85,7 +85,7 @@ export default function AdminPaymentsPage() {
     <AuthGuard>
       <main className="min-h-screen bg-gray-950 p-6 text-white">
         <div className="mx-auto max-w-4xl space-y-6">
-          <h1 className="text-2xl font-bold">Admin Payment Approvals</h1>
+          <h1 className="text-2xl font-bold">Payment Approvals</h1>
 
           <div className="rounded-lg border border-gray-800 bg-gray-900 p-4 space-y-4">
             <label className="block text-sm text-gray-300">
