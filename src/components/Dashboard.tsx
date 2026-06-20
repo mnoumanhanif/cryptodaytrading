@@ -30,14 +30,14 @@ type ApiKeyOptionId = SupportedExchange | 'coingecko';
 
 const API_KEY_OPTIONS: Array<{ id: ApiKeyOptionId; label: string; envKey: string }> = [
   { id: 'binance', label: 'Binance API Key', envKey: 'BINANCE_API_KEY' },
-  { id: 'bybit', label: 'Bybit API Key', envKey: 'BYBIT_API_KEY' },
+  { id: 'mexc', label: 'MEXC API Key', envKey: 'MEXC_API_KEY' },
   { id: 'bitget', label: 'Bitget API Key', envKey: 'BITGET_API_KEY' },
   { id: 'coingecko', label: 'CoinGecko API Key', envKey: 'COINGECKO_API_KEY' },
 ];
 
 const EXCHANGE_LABELS: Record<SupportedExchange, string> = {
   binance: 'Binance',
-  bybit: 'Bybit',
+  mexc: 'MEXC',
   bitget: 'Bitget',
 };
 

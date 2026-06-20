@@ -20,18 +20,6 @@ type CacheEntry = {
   result: EnhancedScannerResponse;
   lastFetchTime: number;
 };
-<<<<<<< HEAD
-const cacheByExchange = new Map<string, CacheEntry>();
-const CACHE_TTL = 30_000; // 30 seconds
-const DEFAULT_SCAN_COUNT = 1000; // scan top 1000 by default for richer scanner/heatmap data
-const BATCH_SIZE = 10;
-const DEADLINE_MS = 55_000; // stop processing before Vercel timeout
-const EXCHANGE_NAMES: Record<SupportedExchange, string> = {
-  binance: 'Binance',
-  bybit: 'Bybit',
-  bitget: 'Bitget',
-=======
-
 const globalForScannerCache = global as unknown as {
   cacheByExchange?: Map<string, CacheEntry>;
 };
@@ -49,7 +37,6 @@ const EXCHANGE_NAMES: Record<SupportedExchange, string> = {
   binance: 'Binance',
   bitget: 'Bitget',
   mexc: 'MEXC',
->>>>>>> fb56024 (Resolved merge conflicts)
 };
 
 const scannerQuerySchema = z.object({
@@ -81,10 +68,7 @@ export async function GET(request: Request) {
     if (contextOrResponse instanceof NextResponse) return contextOrResponse;
 
     const { searchParams } = new URL(request.url);
-<<<<<<< HEAD
-=======
     const forceRefresh = searchParams.get('refresh') === 'true';
->>>>>>> fb56024 (Resolved merge conflicts)
     const parsed = scannerQuerySchema.safeParse({
       signal: searchParams.get('signal')?.toUpperCase() ?? undefined,
       sort: searchParams.get('sort') ?? undefined,
@@ -102,11 +86,7 @@ export async function GET(request: Request) {
 
     const now = Date.now();
     const cached = cacheByExchange.get(cacheKey);
-<<<<<<< HEAD
-    if (cached && now - cached.lastFetchTime < CACHE_TTL) {
-=======
     if (!forceRefresh && cached && now - cached.lastFetchTime < CACHE_TTL) {
->>>>>>> fb56024 (Resolved merge conflicts)
       let coins = cached.result.coins;
       if (signalFilter) coins = coins.filter((c) => c.signal === signalFilter);
       coins = sortCoins(coins, sortBy).slice(0, limit);
@@ -152,9 +132,6 @@ export async function GET(request: Request) {
     const tickers = successful.flatMap(({ exchange, tickers }) =>
       tickers.map((ticker) => ({ exchange, ticker }))
     );
-<<<<<<< HEAD
-=======
-
     // Select candidates to analyze to search all the market efficiently and avoid timeouts:
     // 1. Top 120 volume leaders (20 in dev)
     // 2. Top 30 gainers (5 in dev)
@@ -187,25 +164,15 @@ export async function GET(request: Request) {
     topVolume.forEach(addCandidate);
     topGainers.forEach(addCandidate);
     topDecliners.forEach(addCandidate);
-
->>>>>>> fb56024 (Resolved merge conflicts)
     const coins: EnhancedCoinAnalysis[] = [];
     const startTime = Date.now();
 
     // Process in batches with deadline awareness
-<<<<<<< HEAD
-    for (let i = 0; i < tickers.length; i += BATCH_SIZE) {
-      // Stop processing if we're approaching the function timeout
-      if (Date.now() - startTime > DEADLINE_MS) break;
-
-      const batch = tickers.slice(i, i + BATCH_SIZE);
-=======
     for (let i = 0; i < candidates.length; i += BATCH_SIZE) {
       // Stop processing if we're approaching the function timeout
       if (Date.now() - startTime > DEADLINE_MS) break;
 
       const batch = candidates.slice(i, i + BATCH_SIZE);
->>>>>>> fb56024 (Resolved merge conflicts)
       const results = await Promise.allSettled(
         batch.map(async ({ exchange, ticker }) => {
           const candles = await fetchKlinesByExchange(exchange, ticker.symbol, 100);
@@ -221,15 +188,9 @@ export async function GET(request: Request) {
     }
 
     const qualityFilteredCoins = coins.filter((coin) => {
-<<<<<<< HEAD
-      const hasLowLiquidity = coin.tradeSignal.risk_flags.includes('Low liquidity');
-      const hasManipulationRisk = coin.tradeSignal.risk_flags.includes('Abnormal price spikes detected');
-      return !hasLowLiquidity && !hasManipulationRisk;
-=======
       // Do not filter out low liquidity coins from the general scanner/heatmap
       const hasManipulationRisk = coin.tradeSignal.risk_flags.includes('Abnormal price spikes detected');
       return !hasManipulationRisk;
->>>>>>> fb56024 (Resolved merge conflicts)
     });
     qualityFilteredCoins.sort((a, b) => b.score - a.score);
 

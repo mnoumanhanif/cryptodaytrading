@@ -1,19 +1,10 @@
 'use client';
 
-<<<<<<< HEAD
-import { useMemo, useState } from 'react';
-import { useMarketData } from '@/hooks/useMarketData';
-import { CoinAnalysis } from '@/lib/types';
-import { formatPrice, formatPriceRaw, formatVolume } from '@/lib/utils';
-import TradeSignalBoard from './TradeSignalBoard';
-import AdvancedIndicators from './AdvancedIndicators';
-=======
 import { useMemo, useState, useEffect } from 'react';
 import { useMarketData } from '@/hooks/useMarketData';
 import { CoinAnalysis } from '@/lib/types';
 import { formatPrice, formatPriceRaw, formatVolume } from '@/lib/utils';
 import { SupportedExchange } from '@/lib/exchangeMarket';
->>>>>>> fb56024 (Resolved merge conflicts)
 
 type NewsPulseItem = {
   coin: CoinAnalysis;
@@ -68,10 +59,6 @@ const selectableCoinButtonClass =
 const selectionHint = 'Click for entry, stop loss, take profit, and indicators';
 
 export default function HighOpportunityBoard() {
-<<<<<<< HEAD
-  const { coins, loading, error, lastUpdated, totalScanned, refetch } = useMarketData(['binance']);
-  const [selectedCoin, setSelectedCoin] = useState<CoinAnalysis | null>(null);
-=======
   const [selectedExchange, setSelectedExchange] = useState<SupportedExchange>('binance');
   const selectedExchangesArray = useMemo(() => [selectedExchange], [selectedExchange]);
   const { coins, loading, error, lastUpdated, totalScanned, refetch } = useMarketData(selectedExchangesArray);
@@ -96,17 +83,10 @@ export default function HighOpportunityBoard() {
     setSelectedExchange(exchange);
     setSelectedCoin(null);
   };
->>>>>>> fb56024 (Resolved merge conflicts)
 
   const highlyMovedCoins = useMemo(
     () =>
       [...coins]
-<<<<<<< HEAD
-        .filter((coin) => Math.abs(coin.priceChangePercent) >= 5)
-        .sort((a, b) => Math.abs(b.priceChangePercent) - Math.abs(a.priceChangePercent))
-        .slice(0, 20),
-    [coins]
-=======
         .filter((coin) => {
           if (signalFilter === 'long') return coin.signal === 'BUY';
           if (signalFilter === 'short') return coin.signal === 'SELL';
@@ -116,20 +96,16 @@ export default function HighOpportunityBoard() {
         .sort((a, b) => Math.abs(b.priceChangePercent) - Math.abs(a.priceChangePercent))
         .slice(0, 20),
     [coins, signalFilter]
->>>>>>> fb56024 (Resolved merge conflicts)
   );
 
   const highInterestCoins = useMemo(
     () =>
       [...coins]
-<<<<<<< HEAD
-=======
         .filter((coin) => {
           if (signalFilter === 'long') return coin.signal === 'BUY';
           if (signalFilter === 'short') return coin.signal === 'SELL';
           return true;
         })
->>>>>>> fb56024 (Resolved merge conflicts)
         .map((coin) => ({
           coin,
           interestScore: Math.round(
@@ -143,25 +119,18 @@ export default function HighOpportunityBoard() {
         }))
         .sort((a, b) => b.interestScore - a.interestScore)
         .slice(0, 12),
-<<<<<<< HEAD
-    [coins]
-=======
     [coins, signalFilter]
->>>>>>> fb56024 (Resolved merge conflicts)
   );
 
   const whaleEntries = useMemo(
     () =>
       [...coins]
         .filter((coin) => (coin.indicators.volume?.volumeRatio ?? 0) >= 1.8 && coin.signal === 'BUY')
-<<<<<<< HEAD
-=======
         .filter((coin) => {
           if (signalFilter === 'long') return coin.signal === 'BUY';
           if (signalFilter === 'short') return coin.signal === 'SELL';
           return true;
         })
->>>>>>> fb56024 (Resolved merge conflicts)
         .map((coin) => {
           const estimatedUsd = (coin.indicators.volume?.currentVolume ?? 0) * coin.price;
           const confidence = Math.min(100, Math.round((coin.indicators.volume?.volumeRatio ?? 0) * VOLUME_RATIO_CONFIDENCE_MULTIPLIER));
@@ -169,24 +138,17 @@ export default function HighOpportunityBoard() {
         })
         .sort((a, b) => b.estimatedUsd - a.estimatedUsd)
         .slice(0, 10),
-<<<<<<< HEAD
-    [coins]
-=======
     [coins, signalFilter]
->>>>>>> fb56024 (Resolved merge conflicts)
   );
 
   const socialNewsPulse = useMemo<NewsPulseItem[]>(
     () =>
       [...coins]
-<<<<<<< HEAD
-=======
         .filter((coin) => {
           if (signalFilter === 'long') return coin.signal === 'BUY';
           if (signalFilter === 'short') return coin.signal === 'SELL';
           return true;
         })
->>>>>>> fb56024 (Resolved merge conflicts)
         .sort((a, b) => Math.abs(b.priceChangePercent) - Math.abs(a.priceChangePercent))
         .slice(0, 12)
         .map((coin) => {
@@ -211,24 +173,17 @@ export default function HighOpportunityBoard() {
             trendScore,
           };
         }),
-<<<<<<< HEAD
-    [coins]
-=======
     [coins, signalFilter]
->>>>>>> fb56024 (Resolved merge conflicts)
   );
 
   const maxProfitCandidates = useMemo<ProfitItem[]>(
     () =>
       [...coins]
-<<<<<<< HEAD
-=======
         .filter((coin) => {
           if (signalFilter === 'long') return coin.signal === 'BUY';
           if (signalFilter === 'short') return coin.signal === 'SELL';
           return true;
         })
->>>>>>> fb56024 (Resolved merge conflicts)
         .map((coin) => {
           const moveScore = Math.min(100, Math.abs(coin.priceChangePercent) * OPPORTUNITY_MOVE_MULTIPLIER);
           const volumeScore = Math.min(100, (coin.indicators.volume?.volumeRatio ?? 0) * OPPORTUNITY_VOLUME_MULTIPLIER);
@@ -254,11 +209,7 @@ export default function HighOpportunityBoard() {
         })
         .sort((a, b) => b.opportunityScore - a.opportunityScore)
         .slice(0, 10),
-<<<<<<< HEAD
-    [coins]
-=======
     [coins, signalFilter]
->>>>>>> fb56024 (Resolved merge conflicts)
   );
 
   return (
@@ -274,8 +225,6 @@ export default function HighOpportunityBoard() {
             </p>
           </div>
           <div className="flex items-center gap-2">
-<<<<<<< HEAD
-=======
             <select
               value={selectedExchange}
               onChange={(e) => handleExchangeChange(e.target.value as SupportedExchange)}
@@ -285,7 +234,6 @@ export default function HighOpportunityBoard() {
               <option value="bitget" className="bg-gray-900">Bitget</option>
               <option value="mexc" className="bg-gray-900">MEXC</option>
             </select>
->>>>>>> fb56024 (Resolved merge conflicts)
             <a
               href="/dashboard"
               className="px-2.5 py-1.5 rounded bg-gray-800 hover:bg-gray-700 transition-colors text-xs font-medium"
@@ -304,85 +252,6 @@ export default function HighOpportunityBoard() {
       </header>
 
       <main className="max-w-7xl mx-auto px-4 py-5 space-y-5">
-<<<<<<< HEAD
-        <div className="text-xs text-gray-500">
-          {totalScanned > 0 && `${totalScanned} pairs scanned`}
-          {lastUpdated > 0 && <span className="ml-2">Updated {new Date(lastUpdated).toLocaleTimeString()}</span>}
-          {error && <span className="ml-2 text-red-400">⚠ {error}</span>}
-        </div>
-
-        {selectedCoin && (
-          <section className="rounded-xl border border-blue-700/40 bg-blue-900/10 p-3 space-y-3">
-            <div className="flex items-center justify-between gap-2">
-              <h2 className="text-sm font-semibold text-blue-200">
-                🎯 {symbolName(selectedCoin.symbol)} Trade Guidance
-              </h2>
-              <button
-                type="button"
-                onClick={() => setSelectedCoin(null)}
-                className="text-[11px] px-2 py-1 rounded border border-gray-700 text-gray-300 hover:text-white hover:border-gray-500"
-              >
-                Clear
-              </button>
-            </div>
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-2 text-[11px]">
-              <div className="rounded border border-gray-700 bg-gray-900/60 p-2">
-                <p className="text-gray-400">Entry</p>
-                <p className="font-mono text-blue-300">${formatPriceRaw(selectedCoin.risk.entryPrice)}</p>
-              </div>
-              <div className="rounded border border-red-700/40 bg-red-900/10 p-2">
-                <p className="text-red-300">Stop Loss</p>
-                <p className="font-mono text-red-300">${formatPriceRaw(selectedCoin.risk.stopLoss)}</p>
-              </div>
-              <div className="rounded border border-green-700/40 bg-green-900/10 p-2">
-                <p className="text-green-300">Target (Main)</p>
-                <p className="font-mono text-green-300">${formatPriceRaw(selectedCoin.risk.targetPrice)}</p>
-              </div>
-              <div className="rounded border border-gray-700 bg-gray-900/60 p-2">
-                <p className="text-gray-400">R:R</p>
-                <p className="font-mono text-white">1:{selectedCoin.risk.riskRewardRatio}</p>
-              </div>
-              <div className="rounded border border-gray-700 bg-gray-900/60 p-2">
-                <p className="text-gray-400">TP1</p>
-                <p className="font-mono text-green-300">${formatPriceRaw(selectedCoin.risk.takeProfit1)}</p>
-              </div>
-              <div className="rounded border border-gray-700 bg-gray-900/60 p-2">
-                <p className="text-gray-400">TP2</p>
-                <p className="font-mono text-green-300">${formatPriceRaw(selectedCoin.risk.takeProfit2)}</p>
-              </div>
-              <div className="rounded border border-gray-700 bg-gray-900/60 p-2">
-                <p className="text-gray-400">TP3</p>
-                <p className="font-mono text-green-300">${formatPriceRaw(selectedCoin.risk.takeProfit3)}</p>
-              </div>
-              <div className="rounded border border-gray-700 bg-gray-900/60 p-2">
-                <p className="text-gray-400">Signal</p>
-                <p className="font-semibold text-white">{selectedCoin.signal}</p>
-              </div>
-              <div className="rounded border border-gray-700 bg-gray-900/60 p-2">
-                <p className="text-gray-400">RSI</p>
-                <p className="font-mono text-white">
-                  {selectedCoin.indicators.rsi.value} ({selectedCoin.indicators.rsi.signal})
-                </p>
-              </div>
-              <div className="rounded border border-gray-700 bg-gray-900/60 p-2">
-                <p className="text-gray-400">SMA50</p>
-                <p className="font-mono text-white">${formatPriceRaw(selectedCoin.indicators.ma.sma50)}</p>
-              </div>
-              <div className="rounded border border-gray-700 bg-gray-900/60 p-2">
-                <p className="text-gray-400">EMA9 / EMA21</p>
-                <p className="font-mono text-white">
-                  ${formatPriceRaw(selectedCoin.indicators.ma.ema9)} / ${formatPriceRaw(selectedCoin.indicators.ma.ema21)}
-                </p>
-              </div>
-              <div className="rounded border border-gray-700 bg-gray-900/60 p-2">
-                <p className="text-gray-400">Volume Ratio</p>
-                <p className="font-mono text-white">{selectedCoin.indicators.volume.volumeRatio.toFixed(2)}x</p>
-              </div>
-            </div>
-            <TradeSignalBoard coin={selectedCoin} />
-            <AdvancedIndicators indicators={selectedCoin.indicators} />
-          </section>
-=======
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs text-gray-500">
           <div>
             {totalScanned > 0 && `${totalScanned} pairs scanned`}
@@ -390,7 +259,6 @@ export default function HighOpportunityBoard() {
             {error && <span className="ml-2 text-red-400">⚠ {error}</span>}
           </div>
 
-          {/* Signal Type Filter */}
           <div className="flex items-center gap-1 bg-gray-900/60 border border-gray-800 p-0.5 rounded-lg w-fit self-start sm:self-auto">
             <button
               type="button"
@@ -430,7 +298,6 @@ export default function HighOpportunityBoard() {
           </div>
         </div>
 
-        {/* Loading Indicator */}
         {loading && (
           <div className="flex items-center gap-3 bg-cyan-950/30 border border-cyan-900/40 rounded-xl p-4 text-xs sm:text-sm text-cyan-200 animate-pulse shadow-sm">
             <span className="flex h-3 w-3 relative">
@@ -441,15 +308,11 @@ export default function HighOpportunityBoard() {
               {selectedExchange.charAt(0).toUpperCase() + selectedExchange.slice(1)} is working to gather information...
             </p>
           </div>
->>>>>>> fb56024 (Resolved merge conflicts)
         )}
 
         <section className="rounded-xl border border-green-700/35 bg-green-900/10 p-3">
           <h2 className="text-sm font-semibold text-green-200 mb-2">🚀 Highly Moved Coins (24h)</h2>
           <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-2">
-<<<<<<< HEAD
-            {highlyMovedCoins.length === 0 ? (
-=======
             {loading && highlyMovedCoins.length === 0 ? (
               Array.from({ length: 4 }).map((_, i) => (
                 <div key={i} className="rounded-lg border border-gray-800 bg-gray-900/40 p-3 animate-pulse space-y-2">
@@ -459,18 +322,13 @@ export default function HighOpportunityBoard() {
                 </div>
               ))
             ) : highlyMovedCoins.length === 0 ? (
->>>>>>> fb56024 (Resolved merge conflicts)
               <p className="text-xs text-gray-400">No strong movers right now.</p>
             ) : (
               highlyMovedCoins.map((coin) => (
                 <button
                   type="button"
                   key={`move-${coin.symbol}`}
-<<<<<<< HEAD
-                  onClick={() => setSelectedCoin(coin)}
-=======
                   onClick={() => handleSelectCoin(coin)}
->>>>>>> fb56024 (Resolved merge conflicts)
                   aria-label={`View trade guidance for ${symbolName(coin.symbol)}`}
                   className={selectableCoinButtonClass}
                 >
@@ -489,26 +347,6 @@ export default function HighOpportunityBoard() {
         <section className="rounded-xl border border-cyan-700/35 bg-cyan-900/10 p-3">
           <h2 className="text-sm font-semibold text-cyan-200 mb-2">📈 Highly Interested Coins</h2>
           <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-2">
-<<<<<<< HEAD
-            {highInterestCoins.map(({ coin, interestScore }) => (
-              <button
-                type="button"
-                key={`interest-${coin.symbol}`}
-                onClick={() => setSelectedCoin(coin)}
-                aria-label={`View trade guidance for ${symbolName(coin.symbol)}`}
-                className={selectableCoinButtonClass}
-              >
-                <div className="flex items-center justify-between gap-2">
-                  <p className="text-sm font-semibold text-white">{symbolName(coin.symbol)}</p>
-                  <span className="text-[11px] text-cyan-200">Score {interestScore}</span>
-                </div>
-                <p className="text-[11px] text-gray-300 mt-1">
-                  Vol Ratio {(coin.indicators.volume?.volumeRatio ?? 0).toFixed(2)}x · Signal {coin.signal}
-                </p>
-                <p className="text-[10px] text-blue-300 mt-1">{selectionHint}</p>
-              </button>
-            ))}
-=======
             {loading && highInterestCoins.length === 0 ? (
               Array.from({ length: 6 }).map((_, i) => (
                 <div key={i} className="rounded-lg border border-gray-800 bg-gray-900/40 p-3 animate-pulse space-y-2">
@@ -541,16 +379,12 @@ export default function HighOpportunityBoard() {
                 </button>
               ))
             )}
->>>>>>> fb56024 (Resolved merge conflicts)
           </div>
         </section>
 
         <section className="rounded-xl border border-fuchsia-700/35 bg-fuchsia-900/10 p-3">
           <h2 className="text-sm font-semibold text-fuchsia-200 mb-2">🐋 Whale Entry Detected (BUY bias)</h2>
           <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-2">
-<<<<<<< HEAD
-            {whaleEntries.length === 0 ? (
-=======
             {loading && whaleEntries.length === 0 ? (
               Array.from({ length: 3 }).map((_, i) => (
                 <div key={i} className="rounded-lg border border-gray-800 bg-gray-900/40 p-3 animate-pulse space-y-2">
@@ -563,18 +397,13 @@ export default function HighOpportunityBoard() {
                 </div>
               ))
             ) : whaleEntries.length === 0 ? (
->>>>>>> fb56024 (Resolved merge conflicts)
               <p className="text-xs text-gray-400">No whale-style entries detected now.</p>
             ) : (
               whaleEntries.map((item) => (
                 <button
                   type="button"
                   key={`whale-${item.coin.symbol}`}
-<<<<<<< HEAD
-                  onClick={() => setSelectedCoin(item.coin)}
-=======
                   onClick={() => handleSelectCoin(item.coin)}
->>>>>>> fb56024 (Resolved merge conflicts)
                   aria-label={`View trade guidance for ${symbolName(item.coin.symbol)}`}
                   className={selectableCoinButtonClass}
                 >
@@ -583,11 +412,7 @@ export default function HighOpportunityBoard() {
                     <span className="text-[11px] text-green-300">Confidence {item.confidence}%</span>
                   </div>
                   <p className="text-[11px] text-gray-300 mt-1">Estimated Size: {formatVolume(item.estimatedUsd)}</p>
-<<<<<<< HEAD
-                  <p className="text-[11px] text-gray-400">Volume Ratio: {(item.coin.indicators.volume?.volumeRatio ?? 0).toFixed(2)}x</p>
-=======
-                  <p className="text-[11px] text-gray-405">Volume Ratio: {(item.coin.indicators.volume?.volumeRatio ?? 0).toFixed(2)}x</p>
->>>>>>> fb56024 (Resolved merge conflicts)
+                  <p className="text-[11px] text-gray-405 font-medium">Volume Ratio: {(item.coin.indicators.volume?.volumeRatio ?? 0).toFixed(2)}x</p>
                   <p className="text-[10px] text-blue-300 mt-1">{selectionHint}</p>
                 </button>
               ))
@@ -598,25 +423,6 @@ export default function HighOpportunityBoard() {
         <section className="rounded-xl border border-yellow-700/35 bg-yellow-900/10 p-3">
           <h2 className="text-sm font-semibold text-yellow-200 mb-2">📰 Social Media / News Pulse</h2>
           <div className="space-y-2">
-<<<<<<< HEAD
-            {socialNewsPulse.map((item) => (
-              <button
-                type="button"
-                key={`news-${item.symbol}`}
-                onClick={() => setSelectedCoin(item.coin)}
-                aria-label={`View trade guidance for ${symbolName(item.symbol)}`}
-                className={selectableCoinButtonClass}
-              >
-                <div className="flex items-center justify-between gap-2">
-                  <p className="text-xs font-semibold text-white">{symbolName(item.symbol)}</p>
-                  <span className="text-[11px] text-purple-200">Trend {item.trendScore}/100</span>
-                </div>
-                <p className="text-[11px] text-gray-300 mt-1">{item.headline}</p>
-                <p className="text-[11px] text-cyan-200 mt-1">Sentiment: {item.sentiment > 0 ? '+' : ''}{item.sentiment}</p>
-                <p className="text-[10px] text-blue-300 mt-1">{selectionHint}</p>
-              </button>
-            ))}
-=======
             {loading && socialNewsPulse.length === 0 ? (
               Array.from({ length: 4 }).map((_, i) => (
                 <div key={i} className="rounded-lg border border-gray-800 bg-gray-900/40 p-3 animate-pulse space-y-2">
@@ -649,38 +455,12 @@ export default function HighOpportunityBoard() {
                 </button>
               ))
             )}
->>>>>>> fb56024 (Resolved merge conflicts)
           </div>
         </section>
 
         <section className="rounded-xl border border-emerald-700/35 bg-emerald-900/10 p-3">
           <h2 className="text-sm font-semibold text-emerald-200 mb-2">💰 Maximum Profit Candidates</h2>
           <div className="space-y-2">
-<<<<<<< HEAD
-            {maxProfitCandidates.map((item, idx) => (
-              <button
-                type="button"
-                key={`profit-${item.coin.symbol}`}
-                onClick={() => setSelectedCoin(item.coin)}
-                aria-label={`View trade guidance for ${symbolName(item.coin.symbol)}`}
-                className={selectableCoinButtonClass}
-              >
-                <div className="flex items-center justify-between gap-2">
-                  <p className="text-sm font-semibold text-white">#{idx + 1} {symbolName(item.coin.symbol)}</p>
-                  <span className="text-[11px] text-emerald-200">Opportunity {item.opportunityScore}/100</span>
-                </div>
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-2 mt-1 text-[11px] text-gray-300">
-                  <p>Move: {item.coin.priceChangePercent >= 0 ? '+' : ''}{item.coin.priceChangePercent.toFixed(2)}%</p>
-                  <p>Price: {formatPrice(item.coin.price)}</p>
-                  <p>R:R: 1:{item.coin.risk.riskRewardRatio.toFixed(2)}</p>
-                  <p>Volume: {formatVolume(item.coin.volume24h)}</p>
-                </div>
-                <p className="text-[10px] text-blue-300 mt-1">{selectionHint}</p>
-              </button>
-            ))}
-          </div>
-        </section>
-=======
             {loading && maxProfitCandidates.length === 0 ? (
               Array.from({ length: 3 }).map((_, i) => (
                 <div key={i} className="rounded-lg border border-gray-800 bg-gray-900/40 p-3 animate-pulse space-y-2">
@@ -724,7 +504,6 @@ export default function HighOpportunityBoard() {
           </div>
         </section>
 
-        {/* Modal Popup Window for Coin Details */}
         {selectedCoin && (
           <div
             className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-sm transition-opacity duration-300 cursor-pointer"
@@ -740,7 +519,6 @@ export default function HighOpportunityBoard() {
               }`}
               onClick={(e) => e.stopPropagation()}
             >
-              {/* Header */}
               <div className={`px-5 py-4 border-b flex items-center justify-between ${
                 selectedCoin.signal === 'BUY'
                   ? 'bg-emerald-950/30 border-emerald-900/30'
@@ -779,25 +557,22 @@ export default function HighOpportunityBoard() {
                 </button>
               </div>
 
-              {/* Body */}
               <div className="p-5 space-y-4">
-                {/* Price Row */}
                 <div className="flex items-center justify-between bg-gray-950/40 border border-gray-850/60 rounded-xl p-3">
                   <div>
-                    <p className="text-[11px] text-gray-450 font-medium">Current Price</p>
+                    <p className="text-[11px] text-gray-400 font-medium">Current Price</p>
                     <p className="text-lg font-bold font-mono text-white mt-0.5">
                       ${formatPriceRaw(selectedCoin.price)}
                     </p>
                   </div>
                   <div className="text-right">
-                    <p className="text-[11px] text-gray-450 font-medium">24h Change</p>
+                    <p className="text-[11px] text-gray-400 font-medium">24h Change</p>
                     <span className={`inline-flex items-center mt-1 text-[11px] font-semibold px-2 py-0.5 rounded border ${moveBadgeClass(Math.abs(selectedCoin.priceChangePercent))}`}>
                       {selectedCoin.priceChangePercent >= 0 ? '+' : ''}{selectedCoin.priceChangePercent.toFixed(2)}%
                     </span>
                   </div>
                 </div>
 
-                {/* Confidence */}
                 <div className="bg-gray-950/40 border border-gray-850/60 rounded-xl p-3">
                   <div className="flex justify-between text-xs text-gray-400 mb-1.5">
                     <span className="font-medium">Confidence Score</span>
@@ -805,8 +580,8 @@ export default function HighOpportunityBoard() {
                       selectedCoin.tradeSignal.confidence >= 70
                         ? 'text-emerald-400'
                         : selectedCoin.tradeSignal.confidence >= 40
-                        ? 'text-yellow-455'
-                        : 'text-rose-455'
+                        ? 'text-yellow-500'
+                        : 'text-rose-500'
                     }`}>
                       {selectedCoin.tradeSignal.confidence}%
                     </span>
@@ -825,11 +600,9 @@ export default function HighOpportunityBoard() {
                   </div>
                 </div>
 
-                {/* Key levels: Entry and Stop */}
                 <div className="grid grid-cols-2 gap-3">
-                  {/* Entry Zone */}
                   <div className="bg-gray-950/40 border border-gray-850/60 rounded-xl p-3">
-                    <p className="text-[11px] text-gray-450 font-medium mb-1">Entry Zone</p>
+                    <p className="text-[11px] text-gray-400 font-medium mb-1">Entry Zone</p>
                     <p className="text-xs font-mono text-cyan-300">
                       ${formatPriceRaw(selectedCoin.tradeSignal.entryZoneLow)}
                     </p>
@@ -839,13 +612,12 @@ export default function HighOpportunityBoard() {
                     </p>
                   </div>
 
-                  {/* Stop Loss */}
                   <div className={`border rounded-xl p-3 ${
                     selectedCoin.signal === 'BUY'
                       ? 'bg-rose-500/5 border-rose-500/20'
                       : 'bg-emerald-500/5 border-emerald-500/20'
                   }`}>
-                    <p className="text-[11px] text-gray-455 font-medium mb-1">Stop Loss (Invalidation)</p>
+                    <p className="text-[11px] text-gray-400 font-medium mb-1">Stop Loss (Invalidation)</p>
                     <p className={`text-xs font-mono font-bold ${
                       selectedCoin.signal === 'BUY' ? 'text-rose-400' : 'text-emerald-400'
                     }`}>
@@ -859,7 +631,6 @@ export default function HighOpportunityBoard() {
                   </div>
                 </div>
 
-                {/* Risk : Reward Ratio */}
                 <div className={`flex items-center justify-between border rounded-xl px-4 py-2.5 ${
                   selectedCoin.signal === 'BUY'
                     ? 'bg-emerald-500/5 border-emerald-500/20'
@@ -869,13 +640,12 @@ export default function HighOpportunityBoard() {
                 }`}>
                   <span className="text-xs text-gray-400 font-medium font-sans">Risk : Reward Ratio</span>
                   <span className={`text-sm font-bold font-mono ${
-                    selectedCoin.signal === 'BUY' ? 'text-emerald-400' : selectedCoin.signal === 'SELL' ? 'text-rose-450' : 'text-gray-300'
+                    selectedCoin.signal === 'BUY' ? 'text-emerald-400' : selectedCoin.signal === 'SELL' ? 'text-rose-400' : 'text-gray-300'
                   }`}>
                     1 : {selectedCoin.risk.riskRewardRatio}
                   </span>
                 </div>
 
-                {/* Take Profit Targets */}
                 <div className="space-y-2">
                   <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider">
                     Take Profit Targets
@@ -895,7 +665,7 @@ export default function HighOpportunityBoard() {
                           <span className="text-xs font-mono text-emerald-400 font-bold">
                             ${formatPriceRaw(price)}
                           </span>
-                          <span className="text-[10px] text-emerald-450/70 ml-2 font-mono">
+                          <span className="text-[10px] text-emerald-500/70 ml-2 font-mono">
                             {selectedCoin.signal === 'SELL' ? '−' : '+'}{pct}%
                           </span>
                         </div>
@@ -907,7 +677,6 @@ export default function HighOpportunityBoard() {
             </div>
           </div>
         )}
->>>>>>> fb56024 (Resolved merge conflicts)
       </main>
     </div>
   );

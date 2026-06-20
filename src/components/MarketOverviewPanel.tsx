@@ -1,10 +1,6 @@
 'use client';
 
-<<<<<<< HEAD
-import { useCallback, useEffect, useState } from 'react';
-=======
 import { useCallback, useEffect, useState, useMemo } from 'react';
->>>>>>> fb56024 (Resolved merge conflicts)
 import { formatPrice, formatVolume } from '@/lib/utils';
 import { SupportedExchange } from '@/lib/exchangeMarket';
 
@@ -46,11 +42,7 @@ interface CoinSearchResponse {
 
 const EXCHANGE_LABELS: Record<SupportedExchange, string> = {
   binance: 'Binance',
-<<<<<<< HEAD
-  bybit: 'Bybit',
-=======
   mexc: 'MEXC',
->>>>>>> fb56024 (Resolved merge conflicts)
   bitget: 'Bitget',
 };
 const SEARCH_DEBOUNCE_MS = 300;
@@ -331,21 +323,13 @@ export default function MarketOverviewPanel({ selectedExchanges }: MarketOvervie
 
       <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
         <TrendTable
-<<<<<<< HEAD
-          title="Top 500 Uptrend Coins"
-=======
           title="Top 100 Uptrend Coins"
->>>>>>> fb56024 (Resolved merge conflicts)
           rows={overview.uptrend}
           trendColor="text-green-400"
           positive
         />
         <TrendTable
-<<<<<<< HEAD
-          title="Top 500 Downtrend Coins"
-=======
           title="Top 100 Downtrend Coins"
->>>>>>> fb56024 (Resolved merge conflicts)
           rows={overview.downtrend}
           trendColor="text-red-400"
           positive={false}
@@ -376,11 +360,8 @@ function directionTextColor(direction: OverviewTradeRow['direction']): string {
   return 'text-yellow-400';
 }
 
-<<<<<<< HEAD
-=======
 type SortKey = keyof OverviewTradeRow;
 
->>>>>>> fb56024 (Resolved merge conflicts)
 function TrendTable({
   title,
   rows,
@@ -392,8 +373,6 @@ function TrendTable({
   trendColor: string;
   positive: boolean;
 }) {
-<<<<<<< HEAD
-=======
   const [sortField, setSortField] = useState<SortKey | null>(null);
   const [sortAsc, setSortAsc] = useState<boolean>(true);
 
@@ -442,29 +421,12 @@ function TrendTable({
     );
   };
 
->>>>>>> fb56024 (Resolved merge conflicts)
   return (
     <section className="bg-gray-900 border border-gray-800 rounded-lg p-3 overflow-x-auto">
       <h3 className={`text-sm font-semibold mb-2 ${trendColor}`}>{title}</h3>
       <table className="w-full min-w-[760px] text-sm">
         <thead>
           <tr className="text-xs text-gray-500 border-b border-gray-800">
-<<<<<<< HEAD
-            <th className="text-left py-1.5">Coin</th>
-            <th className="text-right py-1.5">Price</th>
-            <th className="text-right py-1.5">24h</th>
-            <th className="text-right py-1.5">Direction</th>
-            <th className="text-right py-1.5">Entry</th>
-            <th className="text-right py-1.5">Target</th>
-            <th className="text-right py-1.5">Stop Loss</th>
-            <th className="text-right py-1.5">Support</th>
-            <th className="text-right py-1.5">Resistance</th>
-            <th className="text-right py-1.5">Vol</th>
-          </tr>
-        </thead>
-        <tbody>
-          {rows.map((coin) => (
-=======
             {renderHeader('Coin', 'symbol', 'text-left')}
             {renderHeader('Price', 'price', 'text-right')}
             {renderHeader('24h', 'priceChangePercent', 'text-right')}
@@ -479,7 +441,6 @@ function TrendTable({
         </thead>
         <tbody>
           {sortedRows.map((coin) => (
->>>>>>> fb56024 (Resolved merge conflicts)
             <tr key={`${coin.exchange}:${coin.symbol}`} className="border-b border-gray-800/50">
               <td className="py-1.5 text-gray-200">{coin.symbol}</td>
               <td className="py-1.5 text-right text-gray-200">{formatPrice(coin.price)}</td>

@@ -96,12 +96,6 @@ export async function GET(request: Request) {
     }
 
     const tickerResults = await Promise.allSettled(
-<<<<<<< HEAD
-      exchanges.map(async (exchange) => ({
-        exchange,
-        tickers: await getTopUSDTPairsByExchange(exchange, 500),
-      }))
-=======
       exchanges.map(async (exchange) => {
         const top500 = await getTopUSDTPairsByExchange(exchange, 500);
         
@@ -122,7 +116,6 @@ export async function GET(request: Request) {
         
         return { exchange, tickers: top500 };
       })
->>>>>>> fb56024 (Resolved merge conflicts)
     );
     const successful = tickerResults
       .filter(

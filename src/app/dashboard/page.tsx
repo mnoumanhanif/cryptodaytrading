@@ -1,13 +1,3 @@
-<<<<<<< HEAD
-import AuthGuard from '@/components/AuthGuard';
-import Dashboard from '@/components/Dashboard';
-
-export default function DashboardPage() {
-  return (
-    <AuthGuard>
-      <Dashboard />
-    </AuthGuard>
-=======
 'use client';
 
 import React from 'react';
@@ -28,6 +18,5 @@ export default function OverviewPage() {
       </div>
       <MarketOverviewPanel selectedExchanges={effectiveSelectedExchanges} />
     </div>
->>>>>>> fb56024 (Resolved merge conflicts)
   );
 }

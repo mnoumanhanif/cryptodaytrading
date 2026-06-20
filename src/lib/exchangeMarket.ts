@@ -1,14 +1,5 @@
 import { BinanceTicker, Candle } from './types';
 
-<<<<<<< HEAD
-export type SupportedExchange = 'binance' | 'bybit' | 'bitget';
-
-export const SUPPORTED_EXCHANGES: SupportedExchange[] = ['binance', 'bybit', 'bitget'];
-
-const FETCH_TIMEOUT_MS = 8_000;
-const HOUR_IN_MS = 60 * 60 * 1000;
-const BYBIT_KEY = process.env.BYBIT_API_KEY?.trim();
-=======
 export type SupportedExchange = 'binance' | 'bitget' | 'mexc';
 
 export const SUPPORTED_EXCHANGES: SupportedExchange[] = ['binance', 'bitget', 'mexc'];
@@ -16,7 +7,6 @@ export const SUPPORTED_EXCHANGES: SupportedExchange[] = ['binance', 'bitget', 'm
 const FETCH_TIMEOUT_MS = 8_000;
 const HOUR_IN_MS = 60 * 60 * 1000;
 const MEXC_KEY = process.env.MEXC_API_KEY?.trim();
->>>>>>> fb56024 (Resolved merge conflicts)
 const BITGET_KEY = process.env.BITGET_API_KEY?.trim();
 const COINGECKO_KEY = process.env.COINGECKO_API_KEY?.trim();
 const COINGECKO_KEY_HEADER =
@@ -66,26 +56,6 @@ async function fetchJson<T>(url: string, headers?: Record<string, string>): Prom
   }
 }
 
-<<<<<<< HEAD
-interface BybitTickerResponse {
-  result?: {
-    list?: Array<{
-      symbol: string;
-      lastPrice: string;
-      price24hPcnt: string;
-      turnover24h: string;
-      highPrice24h: string;
-      lowPrice24h: string;
-    }>;
-  };
-}
-
-interface BybitKlineResponse {
-  result?: {
-    list?: string[][];
-  };
-}
-=======
 type MexcKline = [
   number, // 0: openTime
   string, // 1: open
@@ -100,7 +70,6 @@ type MexcKline = [
   string, // 10: buyQuoteVolume
   string  // 11: ignore
 ];
->>>>>>> fb56024 (Resolved merge conflicts)
 
 interface BitgetTickerResponse {
   data?: Array<{
@@ -122,37 +91,6 @@ export function isSupportedExchange(value: string | null | undefined): value is 
   return value != null && SUPPORTED_EXCHANGES.includes(value as SupportedExchange);
 }
 
-<<<<<<< HEAD
-async function fetchBybitTopUSDTPairs(topN: number): Promise<BinanceTicker[]> {
-  const data = await fetchJson<BybitTickerResponse>(
-    'https://api.bybit.com/v5/market/tickers?category=linear',
-    BYBIT_KEY ? { 'X-BAPI-API-KEY': BYBIT_KEY } : undefined
-  );
-  const list = data.result?.list ?? [];
-
-  return list
-    .filter((t) => t.symbol.endsWith('USDT'))
-    .map((ticker) => {
-      const lastPrice = parseFloat(ticker.lastPrice);
-      const pctRatio = parseFloat(ticker.price24hPcnt);
-      const pct = normalizePercent(pctRatio);
-      const priceChange = calculatePriceChangeFromPercent(lastPrice, pct);
-      const openPrice = calculateOpenPriceFromPercent(lastPrice, pct);
-      return {
-        symbol: ticker.symbol,
-        priceChange: String(priceChange),
-        priceChangePercent: String(pct),
-        weightedAvgPrice: ticker.lastPrice,
-        lastPrice: ticker.lastPrice,
-        volume: ticker.turnover24h,
-        quoteVolume: ticker.turnover24h,
-        openPrice: String(openPrice),
-        highPrice: ticker.highPrice24h,
-        lowPrice: ticker.lowPrice24h,
-        count: 0,
-      };
-    })
-=======
 async function fetchMexcTopUSDTPairs(topN: number): Promise<BinanceTicker[]> {
   const headers: Record<string, string> = {};
   if (MEXC_KEY) headers['X-MEXC-APIKEY'] = MEXC_KEY;
@@ -164,33 +102,10 @@ async function fetchMexcTopUSDTPairs(topN: number): Promise<BinanceTicker[]> {
 
   return data
     .filter((t) => t.symbol.endsWith('USDT') && !t.symbol.includes('DOWN') && !t.symbol.includes('UP'))
->>>>>>> fb56024 (Resolved merge conflicts)
     .sort((a, b) => parseFloat(b.quoteVolume) - parseFloat(a.quoteVolume))
     .slice(0, topN);
 }
 
-<<<<<<< HEAD
-async function fetchBybitKlines(symbol: string, limit: number): Promise<Candle[]> {
-  const data = await fetchJson<BybitKlineResponse>(
-    `https://api.bybit.com/v5/market/kline?category=linear&symbol=${encodeURIComponent(symbol)}&interval=60&limit=${Math.min(Math.max(limit, 1), 1000)}`,
-    BYBIT_KEY ? { 'X-BAPI-API-KEY': BYBIT_KEY } : undefined
-  );
-  const list = data.result?.list ?? [];
-
-  return list
-    .map((k) => {
-      const openTime = Number(k[0]);
-      return {
-        openTime,
-        open: parseFloat(k[1]),
-        high: parseFloat(k[2]),
-        low: parseFloat(k[3]),
-        close: parseFloat(k[4]),
-        volume: parseFloat(k[5]),
-        closeTime: openTime + HOUR_IN_MS - 1,
-      };
-    })
-=======
 async function fetchMexcKlines(symbol: string, limit: number): Promise<Candle[]> {
   const headers: Record<string, string> = {};
   if (MEXC_KEY) headers['X-MEXC-APIKEY'] = MEXC_KEY;
@@ -211,7 +126,6 @@ async function fetchMexcKlines(symbol: string, limit: number): Promise<Candle[]>
       volume: parseFloat(k[5]),
       closeTime: k[6],
     }))
->>>>>>> fb56024 (Resolved merge conflicts)
     .sort((a, b) => a.openTime - b.openTime);
 }
 
@@ -273,13 +187,8 @@ export async function getTopUSDTPairsByExchange(
   topN: number
 ): Promise<BinanceTicker[]> {
   switch (exchange) {
-<<<<<<< HEAD
-    case 'bybit':
-      return fetchBybitTopUSDTPairs(topN);
-=======
     case 'mexc':
       return fetchMexcTopUSDTPairs(topN);
->>>>>>> fb56024 (Resolved merge conflicts)
     case 'bitget':
       return fetchBitgetTopUSDTPairs(topN);
     case 'binance':
@@ -295,70 +204,6 @@ export async function getTickerBySymbolByExchange(
   symbol: string
 ): Promise<BinanceTicker | null> {
   switch (exchange) {
-<<<<<<< HEAD
-    case 'bybit': {
-      // Try linear (futures) first, then spot if not found
-      try {
-        const linearData = await fetchJson<BybitTickerResponse>(
-          `https://api.bybit.com/v5/market/tickers?category=linear&symbol=${encodeURIComponent(symbol)}`,
-          BYBIT_KEY ? { 'X-BAPI-API-KEY': BYBIT_KEY } : undefined
-        );
-        const linearTicker = linearData.result?.list?.find((item) => item.symbol === symbol);
-        if (linearTicker) {
-          const lastPrice = parseFloat(linearTicker.lastPrice);
-          const pct = normalizePercent(parseFloat(linearTicker.price24hPcnt));
-          const priceChange = calculatePriceChangeFromPercent(lastPrice, pct);
-          const openPrice = calculateOpenPriceFromPercent(lastPrice, pct);
-          return {
-            symbol: linearTicker.symbol,
-            priceChange: String(priceChange),
-            priceChangePercent: String(pct),
-            weightedAvgPrice: linearTicker.lastPrice,
-            lastPrice: linearTicker.lastPrice,
-            volume: linearTicker.turnover24h,
-            quoteVolume: linearTicker.turnover24h,
-            openPrice: String(openPrice),
-            highPrice: linearTicker.highPrice24h,
-            lowPrice: linearTicker.lowPrice24h,
-            count: 0,
-          };
-        }
-      } catch {
-        // Linear market failed, try spot
-      }
-
-      // Try spot market
-      try {
-        const spotData = await fetchJson<BybitTickerResponse>(
-          `https://api.bybit.com/v5/market/tickers?category=spot&symbol=${encodeURIComponent(symbol)}`,
-          BYBIT_KEY ? { 'X-BAPI-API-KEY': BYBIT_KEY } : undefined
-        );
-        const spotTicker = spotData.result?.list?.find((item) => item.symbol === symbol);
-        if (spotTicker) {
-          const lastPrice = parseFloat(spotTicker.lastPrice);
-          const pct = normalizePercent(parseFloat(spotTicker.price24hPcnt));
-          const priceChange = calculatePriceChangeFromPercent(lastPrice, pct);
-          const openPrice = calculateOpenPriceFromPercent(lastPrice, pct);
-          return {
-            symbol: spotTicker.symbol,
-            priceChange: String(priceChange),
-            priceChangePercent: String(pct),
-            weightedAvgPrice: spotTicker.lastPrice,
-            lastPrice: spotTicker.lastPrice,
-            volume: spotTicker.turnover24h,
-            quoteVolume: spotTicker.turnover24h,
-            openPrice: String(openPrice),
-            highPrice: spotTicker.highPrice24h,
-            lowPrice: spotTicker.lowPrice24h,
-            count: 0,
-          };
-        }
-      } catch {
-        // Spot market also failed
-      }
-
-      return null;
-=======
     case 'mexc': {
       try {
         const headers: Record<string, string> = {};
@@ -371,7 +216,6 @@ export async function getTickerBySymbolByExchange(
       } catch {
         return null;
       }
->>>>>>> fb56024 (Resolved merge conflicts)
     }
     case 'bitget': {
       try {
@@ -433,13 +277,8 @@ export async function fetchKlinesByExchange(
   limit = 100
 ): Promise<Candle[]> {
   switch (exchange) {
-<<<<<<< HEAD
-    case 'bybit':
-      return fetchBybitKlines(symbol, limit);
-=======
     case 'mexc':
       return fetchMexcKlines(symbol, limit);
->>>>>>> fb56024 (Resolved merge conflicts)
     case 'bitget':
       return fetchBitgetKlines(symbol, limit);
     case 'binance':

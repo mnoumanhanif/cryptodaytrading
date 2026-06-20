@@ -42,7 +42,7 @@ const CACHE_TTL = 60_000; // 1 minute
 
 const EXCHANGE_NAMES: Record<SupportedExchange, string> = {
   binance: 'Binance',
-  bybit: 'Bybit',
+  mexc: 'MEXC',
   bitget: 'Bitget',
 };
 
