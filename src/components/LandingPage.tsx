@@ -14,6 +14,7 @@ const NAV_GROUPS = [
     bg: 'bg-blue-500/10',
     tabs: [
       {
+<<<<<<< HEAD
         name: 'Top 500',
         desc: 'Track the top 500 crypto pairs by volume, price change and market rank in real time.',
       },
@@ -22,6 +23,8 @@ const NAV_GROUPS = [
         desc: 'Visualise the entire market at a glance — colour-coded by momentum and volatility.',
       },
       {
+=======
+>>>>>>> fb56024 (Resolved merge conflicts)
         name: 'Scanner',
         desc: 'Auto-scan every USDT pair across Binance, Bybit and Bitget for 10–25% gain setups.',
       },
@@ -36,10 +39,13 @@ const NAV_GROUPS = [
     bg: 'bg-yellow-500/10',
     tabs: [
       {
+<<<<<<< HEAD
         name: 'Quick Signals',
         desc: 'Instant BUY / SELL / HOLD signals with entry, stop-loss and target prices.',
       },
       {
+=======
+>>>>>>> fb56024 (Resolved merge conflicts)
         name: 'Trade Suggestions',
         desc: 'AI-generated long/short setups scored by confidence, risk-reward ratio and pattern strength.',
       },

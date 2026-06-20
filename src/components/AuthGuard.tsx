@@ -7,7 +7,7 @@ import { useAuth } from '@/contexts/AuthContext';
 export default function AuthGuard({
   children,
   adminOnly = false,
-  nonAdminRedirect = '/dashboard?tab=overview',
+  nonAdminRedirect = '/dashboard',
 }: {
   children: React.ReactNode;
   adminOnly?: boolean;

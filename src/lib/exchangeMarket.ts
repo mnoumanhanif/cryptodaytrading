@@ -1,5 +1,6 @@
 import { BinanceTicker, Candle } from './types';
 
+<<<<<<< HEAD
 export type SupportedExchange = 'binance' | 'bybit' | 'bitget';
 
 export const SUPPORTED_EXCHANGES: SupportedExchange[] = ['binance', 'bybit', 'bitget'];
@@ -7,6 +8,15 @@ export const SUPPORTED_EXCHANGES: SupportedExchange[] = ['binance', 'bybit', 'bi
 const FETCH_TIMEOUT_MS = 8_000;
 const HOUR_IN_MS = 60 * 60 * 1000;
 const BYBIT_KEY = process.env.BYBIT_API_KEY?.trim();
+=======
+export type SupportedExchange = 'binance' | 'bitget' | 'mexc';
+
+export const SUPPORTED_EXCHANGES: SupportedExchange[] = ['binance', 'bitget', 'mexc'];
+
+const FETCH_TIMEOUT_MS = 8_000;
+const HOUR_IN_MS = 60 * 60 * 1000;
+const MEXC_KEY = process.env.MEXC_API_KEY?.trim();
+>>>>>>> fb56024 (Resolved merge conflicts)
 const BITGET_KEY = process.env.BITGET_API_KEY?.trim();
 const COINGECKO_KEY = process.env.COINGECKO_API_KEY?.trim();
 const COINGECKO_KEY_HEADER =
@@ -56,6 +66,7 @@ async function fetchJson<T>(url: string, headers?: Record<string, string>): Prom
   }
 }
 
+<<<<<<< HEAD
 interface BybitTickerResponse {
   result?: {
     list?: Array<{
@@ -74,6 +85,22 @@ interface BybitKlineResponse {
     list?: string[][];
   };
 }
+=======
+type MexcKline = [
+  number, // 0: openTime
+  string, // 1: open
+  string, // 2: high
+  string, // 3: low
+  string, // 4: close
+  string, // 5: volume
+  number, // 6: closeTime
+  string, // 7: quoteVolume
+  number, // 8: trades
+  string, // 9: buyAssetVolume
+  string, // 10: buyQuoteVolume
+  string  // 11: ignore
+];
+>>>>>>> fb56024 (Resolved merge conflicts)
 
 interface BitgetTickerResponse {
   data?: Array<{
@@ -95,6 +122,7 @@ export function isSupportedExchange(value: string | null | undefined): value is 
   return value != null && SUPPORTED_EXCHANGES.includes(value as SupportedExchange);
 }
 
+<<<<<<< HEAD
 async function fetchBybitTopUSDTPairs(topN: number): Promise<BinanceTicker[]> {
   const data = await fetchJson<BybitTickerResponse>(
     'https://api.bybit.com/v5/market/tickers?category=linear',
@@ -124,10 +152,24 @@ async function fetchBybitTopUSDTPairs(topN: number): Promise<BinanceTicker[]> {
         count: 0,
       };
     })
+=======
+async function fetchMexcTopUSDTPairs(topN: number): Promise<BinanceTicker[]> {
+  const headers: Record<string, string> = {};
+  if (MEXC_KEY) headers['X-MEXC-APIKEY'] = MEXC_KEY;
+
+  const data = await fetchJson<BinanceTicker[]>(
+    'https://api.mexc.com/api/v3/ticker/24hr',
+    headers
+  );
+
+  return data
+    .filter((t) => t.symbol.endsWith('USDT') && !t.symbol.includes('DOWN') && !t.symbol.includes('UP'))
+>>>>>>> fb56024 (Resolved merge conflicts)
     .sort((a, b) => parseFloat(b.quoteVolume) - parseFloat(a.quoteVolume))
     .slice(0, topN);
 }
 
+<<<<<<< HEAD
 async function fetchBybitKlines(symbol: string, limit: number): Promise<Candle[]> {
   const data = await fetchJson<BybitKlineResponse>(
     `https://api.bybit.com/v5/market/kline?category=linear&symbol=${encodeURIComponent(symbol)}&interval=60&limit=${Math.min(Math.max(limit, 1), 1000)}`,
@@ -148,6 +190,28 @@ async function fetchBybitKlines(symbol: string, limit: number): Promise<Candle[]
         closeTime: openTime + HOUR_IN_MS - 1,
       };
     })
+=======
+async function fetchMexcKlines(symbol: string, limit: number): Promise<Candle[]> {
+  const headers: Record<string, string> = {};
+  if (MEXC_KEY) headers['X-MEXC-APIKEY'] = MEXC_KEY;
+
+  const cappedLimit = Math.min(Math.max(limit, 1), 1000);
+  const data = await fetchJson<MexcKline[]>(
+    `https://api.mexc.com/api/v3/klines?symbol=${encodeURIComponent(symbol)}&interval=1h&limit=${cappedLimit}`,
+    headers
+  );
+
+  return data
+    .map((k) => ({
+      openTime: k[0],
+      open: parseFloat(k[1]),
+      high: parseFloat(k[2]),
+      low: parseFloat(k[3]),
+      close: parseFloat(k[4]),
+      volume: parseFloat(k[5]),
+      closeTime: k[6],
+    }))
+>>>>>>> fb56024 (Resolved merge conflicts)
     .sort((a, b) => a.openTime - b.openTime);
 }
 
@@ -209,8 +273,13 @@ export async function getTopUSDTPairsByExchange(
   topN: number
 ): Promise<BinanceTicker[]> {
   switch (exchange) {
+<<<<<<< HEAD
     case 'bybit':
       return fetchBybitTopUSDTPairs(topN);
+=======
+    case 'mexc':
+      return fetchMexcTopUSDTPairs(topN);
+>>>>>>> fb56024 (Resolved merge conflicts)
     case 'bitget':
       return fetchBitgetTopUSDTPairs(topN);
     case 'binance':
@@ -226,6 +295,7 @@ export async function getTickerBySymbolByExchange(
   symbol: string
 ): Promise<BinanceTicker | null> {
   switch (exchange) {
+<<<<<<< HEAD
     case 'bybit': {
       // Try linear (futures) first, then spot if not found
       try {
@@ -288,6 +358,20 @@ export async function getTickerBySymbolByExchange(
       }
 
       return null;
+=======
+    case 'mexc': {
+      try {
+        const headers: Record<string, string> = {};
+        if (MEXC_KEY) headers['X-MEXC-APIKEY'] = MEXC_KEY;
+        const data = await fetchJson<BinanceTicker>(
+          `https://api.mexc.com/api/v3/ticker/24hr?symbol=${encodeURIComponent(symbol)}`,
+          headers
+        );
+        return data || null;
+      } catch {
+        return null;
+      }
+>>>>>>> fb56024 (Resolved merge conflicts)
     }
     case 'bitget': {
       try {
@@ -349,8 +433,13 @@ export async function fetchKlinesByExchange(
   limit = 100
 ): Promise<Candle[]> {
   switch (exchange) {
+<<<<<<< HEAD
     case 'bybit':
       return fetchBybitKlines(symbol, limit);
+=======
+    case 'mexc':
+      return fetchMexcKlines(symbol, limit);
+>>>>>>> fb56024 (Resolved merge conflicts)
     case 'bitget':
       return fetchBitgetKlines(symbol, limit);
     case 'binance':

@@ -4,6 +4,10 @@ import { useMemo, useState } from 'react';
 import { useMarketData } from '@/hooks/useMarketData';
 import { clampScore, formatPrice, formatVolume } from '@/lib/utils';
 import { CoinAnalysis } from '@/lib/types';
+<<<<<<< HEAD
+=======
+import { SupportedExchange } from '@/lib/exchangeMarket';
+>>>>>>> fb56024 (Resolved merge conflicts)
 
 const MAX_DECISIONS = 12;
 const MIN_CONFIDENCE = 60;
@@ -218,11 +222,24 @@ function getMeterToneClass(value: number): string {
 }
 
 export default function AiDecisionBoard() {
+<<<<<<< HEAD
   const { coins, loading, error, lastUpdated, totalScanned, refetch } = useMarketData(['binance']);
+=======
+  const [selectedExchange, setSelectedExchange] = useState<SupportedExchange>('binance');
+  const selectedExchangesArray = useMemo(() => [selectedExchange], [selectedExchange]);
+  const { coins, loading, error, lastUpdated, totalScanned, refetch } = useMarketData(selectedExchangesArray);
+>>>>>>> fb56024 (Resolved merge conflicts)
   const [sortBy, setSortBy] = useState<DecisionSort>('rank');
   const [biasFilter, setBiasFilter] = useState<BiasFilter>('ALL');
   const [focusFilter, setFocusFilter] = useState<FocusFilter>('ALL');
 
+<<<<<<< HEAD
+=======
+  const handleExchangeChange = (exchange: SupportedExchange) => {
+    setSelectedExchange(exchange);
+  };
+
+>>>>>>> fb56024 (Resolved merge conflicts)
   const allDecisions = useMemo<DecisionItem[]>(() => {
     return [...coins]
       .filter((coin) => {
@@ -335,6 +352,18 @@ export default function AiDecisionBoard() {
           </div>
 
           <div className="flex items-center gap-2">
+<<<<<<< HEAD
+=======
+            <select
+              value={selectedExchange}
+              onChange={(e) => handleExchangeChange(e.target.value as SupportedExchange)}
+              className="px-2.5 py-1.5 rounded bg-gray-800 hover:bg-gray-700 border border-gray-700 text-white transition-colors text-xs font-medium focus:outline-none focus:ring-2 focus:ring-cyan-500/50 cursor-pointer"
+            >
+              <option value="binance" className="bg-gray-900">Binance</option>
+              <option value="bitget" className="bg-gray-900">Bitget</option>
+              <option value="mexc" className="bg-gray-900">MEXC</option>
+            </select>
+>>>>>>> fb56024 (Resolved merge conflicts)
             <a
               href="/dashboard"
               className="rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm text-gray-200 transition hover:bg-white/10"
@@ -359,6 +388,22 @@ export default function AiDecisionBoard() {
           </div>
         )}
 
+<<<<<<< HEAD
+=======
+        {/* Loading Indicator */}
+        {loading && (
+          <div className="flex items-center gap-3 bg-cyan-950/30 border border-cyan-900/40 rounded-xl p-4 text-xs sm:text-sm text-cyan-200 animate-pulse shadow-sm">
+            <span className="flex h-3 w-3 relative">
+              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-cyan-400 opacity-75"></span>
+              <span className="relative inline-flex rounded-full h-3 w-3 bg-cyan-500"></span>
+            </span>
+            <p className="font-medium">
+              {selectedExchange.charAt(0).toUpperCase() + selectedExchange.slice(1)} is working to gather information...
+            </p>
+          </div>
+        )}
+
+>>>>>>> fb56024 (Resolved merge conflicts)
         <section className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
           <div className="rounded-2xl border border-white/10 bg-gradient-to-br from-cyan-500/10 to-gray-900 p-4">
             <p className="text-xs uppercase tracking-[0.24em] text-gray-400">Universe scanned</p>

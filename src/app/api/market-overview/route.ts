@@ -68,12 +68,20 @@ type FulfilledTickerLookup = {
   ticker: Awaited<ReturnType<typeof getTickerBySymbolByExchange>>;
 };
 
+<<<<<<< HEAD
 const TREND_LIST_LIMIT = 500;
+=======
+const TREND_LIST_LIMIT = 100;
+>>>>>>> fb56024 (Resolved merge conflicts)
 const UNIVERSE_SIZE = 1000;
 const BATCH_SIZE = 10;
 const EXCHANGE_NAMES: Record<SupportedExchange, string> = {
   binance: 'Binance',
+<<<<<<< HEAD
   bybit: 'Bybit',
+=======
+  mexc: 'MEXC',
+>>>>>>> fb56024 (Resolved merge conflicts)
   bitget: 'Bitget',
 };
 

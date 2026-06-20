@@ -96,10 +96,33 @@ export async function GET(request: Request) {
     }
 
     const tickerResults = await Promise.allSettled(
+<<<<<<< HEAD
       exchanges.map(async (exchange) => ({
         exchange,
         tickers: await getTopUSDTPairsByExchange(exchange, 500),
       }))
+=======
+      exchanges.map(async (exchange) => {
+        const top500 = await getTopUSDTPairsByExchange(exchange, 500);
+        
+        // As a fallback, check if query matches a specific pair on this exchange
+        const targetSymbol = query.endsWith('USDT') ? query : `${query}USDT`;
+        const alreadyIncluded = top500.some((t) => t.symbol === targetSymbol);
+        
+        if (!alreadyIncluded) {
+          try {
+            const liveTicker = await getTickerBySymbolByExchange(exchange, targetSymbol);
+            if (liveTicker) {
+              top500.push(liveTicker);
+            }
+          } catch (e) {
+            console.error(`Failed to fetch live ticker for ${targetSymbol} on ${exchange}:`, e);
+          }
+        }
+        
+        return { exchange, tickers: top500 };
+      })
+>>>>>>> fb56024 (Resolved merge conflicts)
     );
     const successful = tickerResults
       .filter(

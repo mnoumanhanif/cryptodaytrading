@@ -2,8 +2,11 @@
 @tailwind components;
 @tailwind utilities;
 
+<<<<<<< HEAD
 @import '../styles/heatmap.css';
 
+=======
+>>>>>>> fb56024 (Resolved merge conflicts)
 :root {
   --background: #030712;
   --foreground: #f9fafb;

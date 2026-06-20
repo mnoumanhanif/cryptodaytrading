@@ -20,10 +20,41 @@ async function fetchFromBinance(): Promise<ScannerResponse> {
   const { analyzeCoin } = await import('@/lib/analyzer');
 
   const tickers = await getTopUSDTPairs(1000);
+  // Select candidates to analyze to search all the market efficiently and avoid timeouts/freezes client-side:
+  // 1. Top 120 volume leaders
+  // 2. Top 30 gainers (positive change)
+  // 3. Top 30 decliners (negative change)
+  const volumeSorted = [...tickers]; // already sorted by volume desc
+  const topVolume = volumeSorted.slice(0, 120);
+
+  const changeSortedDesc = [...tickers].sort(
+    (a, b) => parseFloat(b.priceChangePercent) - parseFloat(a.priceChangePercent)
+  );
+  const topGainers = changeSortedDesc.slice(0, 30);
+
+  const changeSortedAsc = [...tickers].sort(
+    (a, b) => parseFloat(a.priceChangePercent) - parseFloat(b.priceChangePercent)
+  );
+  const topDecliners = changeSortedAsc.slice(0, 30);
+
+  const seenSymbols = new Set<string>();
+  const candidates: typeof tickers = [];
+
+  const addCandidate = (ticker: typeof tickers[number]) => {
+    if (!seenSymbols.has(ticker.symbol)) {
+      seenSymbols.add(ticker.symbol);
+      candidates.push(ticker);
+    }
+  };
+
+  topVolume.forEach(addCandidate);
+  topGainers.forEach(addCandidate);
+  topDecliners.forEach(addCandidate);
+
   const coins: CoinAnalysis[] = [];
 
-  for (let i = 0; i < tickers.length; i += SCAN_BATCH_SIZE) {
-    const batch = tickers.slice(i, i + SCAN_BATCH_SIZE);
+  for (let i = 0; i < candidates.length; i += SCAN_BATCH_SIZE) {
+    const batch = candidates.slice(i, i + SCAN_BATCH_SIZE);
     const results = await Promise.allSettled(
       batch.map(async (ticker) => {
         const candles = await fetchKlines(ticker.symbol, '1h', 100);
@@ -52,7 +83,7 @@ export function useMarketData(
   const [lastUpdated, setLastUpdated] = useState<number>(0);
   const [totalScanned, setTotalScanned] = useState(0);
 
-  const fetchData = useCallback(async (customSymbols: string[] = []) => {
+  const fetchData = useCallback(async (customSymbols: string[] = [], forceRefresh = false) => {
     if (disabled) {
       setError(null);
       setLoading(false);
@@ -63,7 +94,7 @@ export function useMarketData(
       const exchangesParam = selectedExchanges.join(',');
       const data: ScannerResponse = isStaticExport
         ? await fetchFromBinance()
-        : await fetch(`/api/scanner?exchanges=${encodeURIComponent(exchangesParam)}&limit=1000`, { cache: 'no-store' }).then(
+        : await fetch(`/api/scanner?exchanges=${encodeURIComponent(exchangesParam)}&limit=1000${forceRefresh ? '&refresh=true' : ''}`, { cache: 'no-store' }).then(
             async (res) => {
               if (!res.ok) {
                 let message = `HTTP ${res.status}`;
@@ -152,5 +183,13 @@ export function useMarketData(
     return () => clearInterval(interval);
   }, [fetchData, hasUnauthorizedError, disabled]);
 
-  return { coins, loading, error, hasUnauthorizedError, lastUpdated, totalScanned, refetch: fetchData };
+  return {
+    coins,
+    loading,
+    error,
+    hasUnauthorizedError,
+    lastUpdated,
+    totalScanned,
+    refetch: (customSymbols: string[] = [], forceRefresh = true) => fetchData(customSymbols, forceRefresh)
+  };
 }
