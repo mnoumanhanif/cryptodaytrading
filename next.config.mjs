@@ -8,10 +8,7 @@ const nextConfig = {
     images: { unoptimized: true },
   }),
   serverExternalPackages: [],
-  experimental: {
-    // Increase the fetch timeout for slow Binance API connections
-    fetchCacheKeyPrefix: 'crypto-trader',
-  },
+
   async headers() {
     const csp = [
       "default-src 'self'",

@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState, useEffect } from 'react';
+import { useMemo, useState, useEffect, useRef } from 'react';
 import { useMarketData } from '@/hooks/useMarketData';
 import { CoinAnalysis } from '@/lib/types';
 import { formatPrice, formatPriceRaw, formatVolume } from '@/lib/utils';
@@ -75,14 +75,13 @@ export default function HighOpportunityBoard() {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, []);
 
-  const handleSelectCoin = (coin: CoinAnalysis) => {
-    setSelectedCoin(coin);
-  };
-
-  const handleExchangeChange = (exchange: SupportedExchange) => {
-    setSelectedExchange(exchange);
-    setSelectedCoin(null);
-  };
+  const prevDisplayedCoinsRef = useRef<{ [key: string]: string[] }>({
+    moved: [],
+    interest: [],
+    whale: [],
+    news: [],
+    profit: [],
+  });
 
   const highlyMovedCoins = useMemo(
     () =>
@@ -212,6 +211,69 @@ export default function HighOpportunityBoard() {
     [coins, signalFilter]
   );
 
+  useEffect(() => {
+    if (loading || coins.length === 0) return;
+
+    if ('Notification' in window && Notification.permission === 'default') {
+      Notification.requestPermission();
+    }
+
+    const currentLists = {
+      moved: highlyMovedCoins.map((c) => c.symbol),
+      interest: highInterestCoins.map((c) => c.coin.symbol),
+      whale: whaleEntries.map((c) => c.coin.symbol),
+      news: socialNewsPulse.map((c) => c.symbol),
+      profit: maxProfitCandidates.map((c) => c.coin.symbol),
+    };
+
+    const prev = prevDisplayedCoinsRef.current;
+    
+    const isInitialLoad =
+      prev.moved.length === 0 &&
+      prev.interest.length === 0 &&
+      prev.whale.length === 0 &&
+      prev.news.length === 0 &&
+      prev.profit.length === 0;
+
+    if (!isInitialLoad) {
+      const newCoins = new Set<string>();
+
+      const checkList = (listName: keyof typeof currentLists, current: string[]) => {
+        const prevList = prev[listName];
+        current.forEach((symbol) => {
+          if (!prevList.includes(symbol)) {
+            newCoins.add(symbolName(symbol));
+          }
+        });
+      };
+
+      checkList('moved', currentLists.moved);
+      checkList('interest', currentLists.interest);
+      checkList('whale', currentLists.whale);
+      checkList('news', currentLists.news);
+      checkList('profit', currentLists.profit);
+
+      if (newCoins.size > 0) {
+        if ('Notification' in window && Notification.permission === 'granted') {
+          new Notification('New Opportunity Detected!', {
+            body: `New coins added to radar: ${Array.from(newCoins).join(', ')}`,
+          });
+        }
+      }
+    }
+
+    prevDisplayedCoinsRef.current = currentLists;
+  }, [highlyMovedCoins, highInterestCoins, whaleEntries, socialNewsPulse, maxProfitCandidates, loading, coins.length]);
+
+  const handleSelectCoin = (coin: CoinAnalysis) => {
+    setSelectedCoin(coin);
+  };
+
+  const handleExchangeChange = (exchange: SupportedExchange) => {
+    setSelectedExchange(exchange);
+    setSelectedCoin(null);
+  };
+
   return (
     <div className="min-h-screen bg-gray-950 text-white">
       <header className="border-b border-gray-800 bg-gray-900/80 backdrop-blur-sm sticky top-0 z-10">
@@ -248,6 +310,13 @@ export default function HighOpportunityBoard() {
               Refresh
             </button>
           </div>
+        </div>
+        <div className="max-w-7xl mx-auto px-4 py-2 border-t border-gray-800/50 overflow-x-auto whitespace-nowrap flex gap-6 text-xs font-medium [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]">
+          <button onClick={() => document.getElementById('highly-moved')?.scrollIntoView({ behavior: 'smooth' })} className="text-gray-400 hover:text-green-300 transition-colors">🚀 Highly Moved</button>
+          <button onClick={() => document.getElementById('highly-interested')?.scrollIntoView({ behavior: 'smooth' })} className="text-gray-400 hover:text-cyan-300 transition-colors">📈 Highly Interested</button>
+          <button onClick={() => document.getElementById('whale-entries')?.scrollIntoView({ behavior: 'smooth' })} className="text-gray-400 hover:text-fuchsia-300 transition-colors">🐋 Whale Entry</button>
+          <button onClick={() => document.getElementById('social-news')?.scrollIntoView({ behavior: 'smooth' })} className="text-gray-400 hover:text-yellow-300 transition-colors">📰 Social / News</button>
+          <button onClick={() => document.getElementById('max-profit')?.scrollIntoView({ behavior: 'smooth' })} className="text-gray-400 hover:text-emerald-300 transition-colors">💰 Max Profit</button>
         </div>
       </header>
 
@@ -310,7 +379,7 @@ export default function HighOpportunityBoard() {
           </div>
         )}
 
-        <section className="rounded-xl border border-green-700/35 bg-green-900/10 p-3">
+        <section id="highly-moved" className="rounded-xl border border-green-700/35 bg-green-900/10 p-3 scroll-mt-32">
           <h2 className="text-sm font-semibold text-green-200 mb-2">🚀 Highly Moved Coins (24h)</h2>
           <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-2">
             {loading && highlyMovedCoins.length === 0 ? (
@@ -344,7 +413,7 @@ export default function HighOpportunityBoard() {
           </div>
         </section>
 
-        <section className="rounded-xl border border-cyan-700/35 bg-cyan-900/10 p-3">
+        <section id="highly-interested" className="rounded-xl border border-cyan-700/35 bg-cyan-900/10 p-3 scroll-mt-32">
           <h2 className="text-sm font-semibold text-cyan-200 mb-2">📈 Highly Interested Coins</h2>
           <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-2">
             {loading && highInterestCoins.length === 0 ? (
@@ -382,7 +451,7 @@ export default function HighOpportunityBoard() {
           </div>
         </section>
 
-        <section className="rounded-xl border border-fuchsia-700/35 bg-fuchsia-900/10 p-3">
+        <section id="whale-entries" className="rounded-xl border border-fuchsia-700/35 bg-fuchsia-900/10 p-3 scroll-mt-32">
           <h2 className="text-sm font-semibold text-fuchsia-200 mb-2">🐋 Whale Entry Detected (BUY bias)</h2>
           <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-2">
             {loading && whaleEntries.length === 0 ? (
@@ -420,7 +489,7 @@ export default function HighOpportunityBoard() {
           </div>
         </section>
 
-        <section className="rounded-xl border border-yellow-700/35 bg-yellow-900/10 p-3">
+        <section id="social-news" className="rounded-xl border border-yellow-700/35 bg-yellow-900/10 p-3 scroll-mt-32">
           <h2 className="text-sm font-semibold text-yellow-200 mb-2">📰 Social Media / News Pulse</h2>
           <div className="space-y-2">
             {loading && socialNewsPulse.length === 0 ? (
@@ -458,7 +527,7 @@ export default function HighOpportunityBoard() {
           </div>
         </section>
 
-        <section className="rounded-xl border border-emerald-700/35 bg-emerald-900/10 p-3">
+        <section id="max-profit" className="rounded-xl border border-emerald-700/35 bg-emerald-900/10 p-3 scroll-mt-32">
           <h2 className="text-sm font-semibold text-emerald-200 mb-2">💰 Maximum Profit Candidates</h2>
           <div className="space-y-2">
             {loading && maxProfitCandidates.length === 0 ? (

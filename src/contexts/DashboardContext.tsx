@@ -433,7 +433,7 @@ export function DashboardProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     setScannerPage(1);
-  }, [query, signalFilter, sortBy, effectiveSelectedExchanges, coins.length]);
+  }, [query, signalFilter, sortBy, effectiveSelectedExchanges]);
 
   useEffect(() => {
     if (scannerPage > scannerTotalPages) {

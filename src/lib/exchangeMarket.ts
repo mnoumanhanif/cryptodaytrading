@@ -112,7 +112,7 @@ async function fetchMexcKlines(symbol: string, limit: number): Promise<Candle[]>
 
   const cappedLimit = Math.min(Math.max(limit, 1), 1000);
   const data = await fetchJson<MexcKline[]>(
-    `https://api.mexc.com/api/v3/klines?symbol=${encodeURIComponent(symbol)}&interval=1h&limit=${cappedLimit}`,
+    `https://api.mexc.com/api/v3/klines?symbol=${encodeURIComponent(symbol)}&interval=60m&limit=${cappedLimit}`,
     headers
   );
 
